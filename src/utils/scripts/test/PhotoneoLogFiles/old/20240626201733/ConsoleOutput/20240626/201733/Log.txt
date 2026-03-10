@@ -1,2 +1,0 @@
-2024-06-26 20:17:43.481 Warning: Unknown error in API call response
-2024-06-26 20:17:43.481 Method wrapper for command GetDeviceList error: error

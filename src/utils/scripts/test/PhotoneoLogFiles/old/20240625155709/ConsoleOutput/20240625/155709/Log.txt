@@ -1,5 +1,0 @@
-2024-06-25 15:57:09.572 Client(phoxi_api_53907) created data connection
-2024-06-25 15:57:09.580 PhoXiTest Init OK
-2024-06-25 15:57:09.580 PhoXi Device PhoXi Scanner is Connected
-2024-06-25 15:57:09.580 Version could not be parsed: 
-2024-06-25 15:57:09.580                IsFileCamera: 1

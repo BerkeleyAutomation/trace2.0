@@ -1,6 +1,0 @@
-2024-06-22 19:57:10.271 Error: Client(phoxi_api_6959) can't create connector to the server( phoxi_api_0), or can't send syn packet
-2024-06-22 19:57:10.271 Warning: Unknown error in API call response
-2024-06-22 19:57:10.271 Method wrapper for command GetDeviceList error: error
-2024-06-22 19:57:30.925 Client(phoxi_api_6959) created data connection
-2024-06-22 19:57:31.209 PhoXiTest Init OK
-2024-06-22 19:57:31.209 PhoXi Device PhoXi Scanner is Connected
