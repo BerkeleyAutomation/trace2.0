@@ -1,0 +1,14 @@
+2024-06-22 13:48:27.791 RemoveLogsOverSizeLimit exception: boost::filesystem::directory_iterator::construct: No such file or directory: "/home/justinyu/multicable-decluttering/multicable-decluttering/scripts/./PhotoneoLogFiles//old"
+2024-06-22 13:48:37.783 Warning: Unknown error in API call response
+2024-06-22 13:48:37.783 Method wrapper for command GetDeviceList error: error
+2024-06-22 13:48:55.453 Client(phoxi_api_25064) created data connection
+2024-06-22 13:48:55.754 PhoXiTest Init OK
+2024-06-22 13:48:55.754 PhoXi Device PhoXi Scanner is Connected
+2024-06-22 13:49:05.767 PhoXiTest Init OK
+2024-06-22 13:49:05.767 PhoXi Device PhoXi Scanner is Connected
+2024-06-22 14:08:38.967 PhoXiTest Init OK
+2024-06-22 14:08:38.967 PhoXi Device PhoXi Scanner is Connected
+2024-06-22 14:09:06.540 PhoXiTest Init OK
+2024-06-22 14:09:06.540 PhoXi Device PhoXi Scanner is Connected
+2024-06-22 14:09:16.859 PhoXiTest Init OK
+2024-06-22 14:09:16.859 PhoXi Device PhoXi Scanner is Connected

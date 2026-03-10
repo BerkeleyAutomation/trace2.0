@@ -1,0 +1,26 @@
+20:59:20 DEBUG    Starting sync
+20:59:20 DEBUG    Ending sync
+20:59:20 DEBUG    Starting sync
+20:59:20 DEBUG    Ending sync
+20:59:20 DEBUG    Starting sync
+20:59:22 DEBUG    Ending sync
+20:59:22 DEBUG    Starting sync
+20:59:22 DEBUG    Ending sync
+20:59:22 DEBUG    Starting sync
+20:59:24 DEBUG    Ending sync
+20:59:24 DEBUG    Starting sync
+20:59:24 DEBUG    Ending sync
+20:59:24 DEBUG    Starting sync
+20:59:24 DEBUG    Ending sync
+20:59:24 DEBUG    Starting sync
+20:59:25 DEBUG    Ending sync
+21:00:18 WARNING  No such comm: c2abd1f1e0b845d195cb218452f29f29
+21:00:18 DEBUG    Current comms: []
+21:00:57 WARNING  No such comm: 8817059639174c51898b0693d55e2223
+21:00:57 DEBUG    Current comms: []
+21:00:57 WARNING  No such comm: 8817059639174c51898b0693d55e2223
+21:00:57 DEBUG    Current comms: []
+21:03:00 WARNING  No such comm: 0201b7f48cc449d698fcb04bccb22215
+21:03:00 DEBUG    Current comms: []
+21:03:00 WARNING  No such comm: 0201b7f48cc449d698fcb04bccb22215
+21:03:00 DEBUG    Current comms: []

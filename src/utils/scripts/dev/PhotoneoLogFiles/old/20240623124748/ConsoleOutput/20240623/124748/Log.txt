@@ -1,0 +1,4 @@
+2024-06-23 12:47:48.591 RemoveLogsOverSizeLimit exception: boost::filesystem::directory_iterator::construct: No such file or directory: "/home/justinyu/multicable-decluttering/decluttering/scripts/dev/./PhotoneoLogFiles//old"
+2024-06-23 12:47:48.623 Client(phoxi_api_36063) created data connection
+2024-06-23 12:47:48.631 PhoXiTest Init OK
+2024-06-23 12:47:48.631 PhoXi Device PhoXi Scanner is Connected

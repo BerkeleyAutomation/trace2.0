@@ -1,0 +1,12 @@
+color_image_rescale_factor: .8
+vis: True
+num_transform_avg: 1
+num_images: 1
+corners_x: 6 # number of corners in the x direction
+corners_y: 4 # number of corners in the y direction
+flip_normal: 0
+point_order: row_major
+# VISUALIZATION PARAMS
+# vis: 0 # visualize registration
+debug: 1 # show the final pose detection
+scale_amt: 0.1 # scale for vis axes
