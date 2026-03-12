@@ -1,1 +1,4 @@
 output/*
+src/utils/scripts/test/logs/full_rollouts
+*.pyc
+*.pyo

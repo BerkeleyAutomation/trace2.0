@@ -332,13 +332,12 @@
 #     print(f"\nDone! All outputs in: {output_dir}")
 
 import sys
-sys.path.append('/home/justinyu/multicable-decluttering/')
 import cv2
 import torch
 import numpy as np
 import argparse
-from decluttering.data.utils.endpoint_detector_dataloader import EndpointDataloader
-from decluttering.data.utils.detic_dataloader import DeticDataloader
+from utils.endpoint_detector_dataloader import EndpointDataloader
+from utils.detic_dataloader import DeticDataloader
 def predict_pts(img, endpt_model, bool_detic_mask=None, detic_mask=None):
     """Detect cable endpoints in the image."""
     img_down = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))

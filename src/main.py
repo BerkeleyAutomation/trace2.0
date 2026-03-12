@@ -221,8 +221,8 @@ def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350):
     for dp in div_points:
         x, y = int(dp[0]), int(dp[1])
         cv2.drawMarker(vis, (x, y), (255, 0, 0),
-                       markerType=cv2.MARKER_CROSS, markerSize=30, thickness=3)
-        cv2.circle(vis, (x, y), 20, (255, 0, 0), 2)
+                       markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        cv2.circle(vis, (x, y), DENSITY_RADIUS, (255, 0, 0), 2)
 
     # Zoom in around the primary divergence point
     primary = div_points[0]
@@ -236,6 +236,12 @@ def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350):
 
     cv2.imwrite(os.path.join(iter_path, 'divergence_point.png'),
                 cv2.cvtColor(zoomed, cv2.COLOR_RGB2BGR))
+
+
+def write_status(output_dir, message):
+    """Write current pipeline status to status.txt for the dashboard to display."""
+    with open(os.path.join(output_dir, "status.txt"), "w") as f:
+        f.write(message)
 
 
 def initialize_robot():
@@ -510,7 +516,7 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
 
     # Initialize camera
     print("Initializing camera...")
-    cam = BRIOSensor(1)
+    cam = BRIOSensor(0)
     print("Camera initialized.")
 
     # Initialize vision models
@@ -532,16 +538,19 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
             f.write(f"Iter {i}:\n")
 
         # Capture image
+        write_status(output_dir, f"Iter {i}: Capturing image...")
         img = capture_image(cam)
         cv2.imwrite(os.path.join(iter_path, "raw_image.png"), img)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_down = cv2.resize(img_rgb, (img_rgb.shape[1]//2, img_rgb.shape[0]//2))
 
         # Run parallelized vision pipeline
+        write_status(output_dir, f"Iter {i}: Running Detic + endpoint detection in parallel...")
         (bool_detic_mask, detic_mask, detic_out, endpoints,
          trace_list, endpt_table, densities, mask_num) = run_vision_parallel(
             img_rgb, img_down, detic_loader, endpt_model, tracer, viz=viz
         )
+        write_status(output_dir, f"Iter {i}: Tracing complete — {len(endpoints)} endpoints detected.")
 
         # Save visualizations
         save_object_masks_image(img_down, detic_mask, iter_path, viz)
@@ -567,23 +576,27 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
         # Decision: Declutter or IP maneuver
         if mask_num != -1:
             print("Executing declutter...")
+            write_status(output_dir, f"Iter {i}: Executing declutter (removing objects)...")
             with open(log_path, "a") as f:
                 f.write("Decluttering Objects\n")
             execute_declutter(interface, detic_out, mask_num)
             continue
 
         # Find divergence points
+        write_status(output_dir, f"Iter {i}: Finding divergence points...")
         output = get_all_div_points(img_down, endpoints, trace_list, endpt_table, densities)
         asc_endpts = output.get('asc_endpts', [])
 
         # Check if all endpoints matched
         if len(asc_endpts) == num_endpoints // 2:
             print("All endpoints matched! Pipeline complete.")
+            write_status(output_dir, "All endpoints matched! Pipeline complete.")
             break
 
         # No divergence points found
         if "div_points" not in output:
             print("No divergence points found.")
+            write_status(output_dir, f"Iter {i}: No divergence points found — stopping.")
             break
 
         # Execute IP maneuver
@@ -604,6 +617,7 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
                 centroid, cent_area = find_open_knot_regions(img_down, div_pt, viz=viz)
                 if centroid is not None:
                     print("Executing knot dilation...")
+                    write_status(output_dir, f"Iter {i}: Executing Knot Dilation ({dense_count} dense px, area={cent_area:.1f})...")
                     execute_knot_dilation(interface, centroid)
                     with open(log_path, "a") as f:
                         f.write(f"Knot Dilation: {dense_count} dense px, area={cent_area:.2f}\n")
@@ -612,19 +626,26 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
 
         if do_push:
             print("Executing push-through...")
+            write_status(output_dir, f"Iter {i}: Executing Push Through...")
             try:
                 vec_angle, vec_dist = execute_push_through(
                     interface, div_points, img_down, trace_list, endpt_1, endpt_2
                 )
+                write_status(output_dir, f"Iter {i}: Push Through complete (angle={vec_angle:.1f}°, dist={vec_dist:.1f}px).")
                 with open(log_path, "a") as f:
                     f.write(f"Push Through: angle={vec_angle:.2f}, dist={vec_dist:.2f}\n")
             except Exception as e:
                 print(f"Push-through failed: {e}")
+                write_status(output_dir, f"Iter {i}: Push Through FAILED — {e}")
                 with open(log_path, "a") as f:
                     f.write(f"Push Through FAILED: {e}\n")
                 break
 
+    write_status(output_dir, f"Pipeline complete. Output saved to: {output_dir}")
     print(f"\nPipeline complete. Output saved to: {output_dir}")
+
+
+    
 
 
 def main():

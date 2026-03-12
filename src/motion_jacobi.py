@@ -1,3 +1,4 @@
+import copy
 import cv2
 import time
 import colorsys
@@ -21,6 +22,7 @@ from autolab_core.transformations import rotation_matrix, quaternion_from_matrix
 # from untangling.utils.interface_rws_BRIO import CameraIntrinsics
 from autolab_core import RigidTransform, Point
 from autolab_core import CameraIntrinsics
+import jacobi
 
 X_BUFFER = 250
 Y_BUFFER = 100
@@ -50,17 +52,17 @@ T_CAM_BASE = RigidTransform.load("/home/justinyu/multicable-decluttering/declutt
 CAM_INTR = CameraIntrinsics(fx=3.43246678e+03, fy=3.44478930e+03,
            cx=1.79637288e+03, cy=1.08661527e+03, width=3840, height=2160, frame='brio')
 
-FIXED_DEPTH = 0.061
-FOAM_DEPTH = 0.0582
+FIXED_DEPTH = 0.061 + 0.127
+FOAM_DEPTH = 0.0582 + 0.127 # 0.127 = 5 inch inc from box
 
 FOAM_DEPTH_R_ADJ_VAL =  -0.0025
 FOAM_DEPTH_L_ADJ_VAL = -0.005
 
-FOAM_DEPTH_R = 0.0543 + FOAM_DEPTH_R_ADJ_VAL
-FOAM_DEPTH_L = 0.0534 + FOAM_DEPTH_L_ADJ_VAL
+FOAM_DEPTH_R = 0.0543 + FOAM_DEPTH_R_ADJ_VAL + 0.127
+FOAM_DEPTH_L = 0.0534 + FOAM_DEPTH_L_ADJ_VAL + 0.127
 
-DEC_FIXED_DEPTH_OBJ_L = 0.0605 #0.0650
-DEC_FIXED_DEPTH_OBJ_R = 0.0605 #0.0650
+DEC_FIXED_DEPTH_OBJ_L = 0.0605 + 0.127 #0.0650
+DEC_FIXED_DEPTH_OBJ_R = 0.0605 + 0.127 #0.0650
 DEC_CAM_INTR = CameraIntrinsics(fx=3.43246678e+03, fy=3.44478930e+03,
            cx=1.79637288e+03, cy=1.08661527e+03, width=3840, height=2160, frame='brio')
 
@@ -70,7 +72,7 @@ def get_world_coord_from_pixel_coord(pixel_coord, cam_intrinsics):
     cam_intrinsics: 3x3 camera intrinsics matrix
     '''
     pixel_coord = np.array(pixel_coord)
-    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.04-FOAM_DEPTH])
+    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.167-FOAM_DEPTH])
     point_3d_world = T_CAM_BASE.matrix.dot(np.r_[point_3d_cam, 1.0])
     # print(point_3d_world)
     point_3d_world = point_3d_world[:3]/point_3d_world[3]
@@ -154,7 +156,7 @@ def get_dist_gradient(labels, label):
     dist_transform = cv2.distanceTransform(binary_img, cv2.DIST_L2, 5)
 
     import matplotlib.pyplot as plt
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     
     #plot gaussian
     gaussian = gaussian_2d(padded_labels.shape[0], padded_labels.shape[1])
@@ -329,7 +331,7 @@ def get_push_coords(poi_coords, img_rgb, trace_list, endpt_1, endpt_2,
 
             vec_angle = vector_angle(poi_vec_1, poi_vec_2)
             if vec_angle > 90:
-                import pdb; pdb.set_trace()
+                pass  # import pdb; pdb.set_trace()
         
         poi_vec_bisect = (poi_vec_1 + poi_vec_2) / 2 # Direction
         bi_point = (poi_trace_1 + poi_trace_2) / 2   # coord(x, y)
@@ -700,8 +702,8 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
         place2 = np.array([place2[0], place2[1], FOAM_DEPTH_R])
         print(place1)
         print(place2)
-        intermediate_place1 = place1 + np.array([0, 0, 0.07])
-        intermediate_place2 = place2 + np.array([0, 0, 0.07])
+        intermediate_place1 = place1 + np.array([0, 0, 0.06])
+        intermediate_place2 = place2 + np.array([0, 0, 0.06])
         print(intermediate_place1)
         print(intermediate_place2)
 
@@ -742,21 +744,24 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
         
         # traj = iface.plan(motion)
         # import pdb; pdb.set_trace()
+        if isinstance(traj, jacobi.PlanningError):
+            print("Motion planning failed!", traj)
+            raise RuntimeError
         if traj is None:
             print("Motion planning failed!")
             return RuntimeError
         
         result = iface.run_trajectories(traj) # come back to
             
-        iface.go_delta(right_delta=[0, 0, 0.05])
+        iface.go_delta(right_delta=[0, 0, 0.1])
 
     else:
         place1 = np.array([place1[0], place1[1], FOAM_DEPTH_L])
         place2 = np.array([place2[0], place2[1], FOAM_DEPTH_L])
         print(place1)
         print(place2)
-        intermediate_place1 = place1 + np.array([0, 0, 0.07])
-        intermediate_place2 = place2 + np.array([0, 0, 0.07])
+        intermediate_place1 = place1 + np.array([0, 0, 0.035])
+        intermediate_place2 = place2 + np.array([0, 0, 0.035])
         print(intermediate_place1)
         print(intermediate_place2)
         
@@ -795,7 +800,9 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
         # motion = [m1, lm1]
         
         traj = iface.plan_linear_waypoints(l_targets=[intermediate_place1_transform, place1_transform, place2_transform], return_motions=False)
-
+        if isinstance(traj, jacobi.PlanningError):
+            print("Motion planning failed!", traj)
+            raise RuntimeError
         # traj = iface.plan(motion)
         if traj is None:
             print("Motion planning failed!")
@@ -803,7 +810,7 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
 
         result = iface.run_trajectories(traj)
         
-        iface.go_delta(left_delta=[0, 0, 0.05])
+        iface.go_delta(left_delta=[0, 0, 0.1])
 
     # if pin_arm is not None:
     #     time.sleep(1)
@@ -1204,8 +1211,8 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     iface.open_grippers()
     place1_l = get_world_coord_from_pixel_coord(waypoint_l, DEC_CAM_INTR) # convert pixel coordinates to 3d coordinates
     place1_l = [place1_l[0], place1_l[1], DEC_FIXED_DEPTH_OBJ_L]
-    intermediate_place1_l = [place1_l[0], place1_l[1], 0.19]
-    intermediate_place2_l = [place1_l[0], place1_l[1], 0.17]
+    intermediate_place1_l = [place1_l[0], place1_l[1], 0.19 + 0.126]
+    intermediate_place2_l = [place1_l[0], place1_l[1], 0.17 + 0.126]
     rot_l = get_gripper_rot(np.radians(angle_l), iface)    
     intermediate_place1_transform_l = RigidTransform(
         translation=intermediate_place1_l,
@@ -1229,9 +1236,9 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     )
 
     place1_r = get_world_coord_from_pixel_coord(waypoint_r, DEC_CAM_INTR) # convert pixel coordinates to 3d coordinates
-    place1_r = [place1_r[0], place1_r[1], DEC_FIXED_DEPTH_OBJ_L]
-    intermediate_place1_r = [place1_r[0], place1_r[1], 0.19]  #prev = 0.15
-    intermediate_place2_r = [place1_r[0], place1_r[1], 0.17]  #prev = 0.15
+    place1_r = [place1_r[0], place1_r[1], DEC_FIXED_DEPTH_OBJ_R]
+    intermediate_place1_r = [place1_r[0], place1_r[1], 0.19 + 0.126]  #prev = 0.15
+    intermediate_place2_r = [place1_r[0], place1_r[1], 0.17 + 0.126]  #prev = 0.15
     rot_r = get_gripper_rot(np.radians(angle_r), iface)
      
     intermediate_place1_transform_r = RigidTransform(
@@ -1508,7 +1515,7 @@ def rotate_gripper(arm: str, iface):
     negative_90 = copy.deepcopy(positive_90)
     
     positive_90[-1] = min(positive_90[-1] + np.pi/2, 2*np.pi)   # rotate wrist angles
-    negative_90[-1] = max(positive_90[-1] - np.pi/2, -2*np.pi)
+    negative_90[-1] = max(negative_90[-1] - np.pi/2, -2*np.pi)
 
     if arm == "right":
         iface.move_to(right_goal=positive_90)
