@@ -3,26 +3,41 @@ import os
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
+from sklearn.cluster import DBSCAN
 
 
-def detect_hubs(endpoints, trace_list, n_hubs=2, offset_px=60, cluster_threshold=150, direction_cos_threshold=0.0):
+def detect_hubs(endpoints, trace_list, n_hubs=2, offset_px=60, eps=150, min_samples=1, cluster_threshold=150, direction_cos_threshold=0.0):
     if len(endpoints) < 2:
         print("[detect_hubs] Not enough endpoints to detect hubs")
         return []
     
     pts = np.array(endpoints, dtype=float)
 
-    clusters = [[0]]
-    for i in range(1, len(pts)):
+    # clusters = [[0]]
+    # for i in range(1, len(pts)):
+    #     centroids = [np.mean(pts[c], axis=0) for c in clusters]
+    #     dists = [np.linalg.norm(pts[i] - c) for c in centroids]
+    #     nearest = np.argmin(dists)
+    #     if dists[nearest] < cluster_threshold or len(clusters) >= n_hubs:
+    #         clusters[nearest].append(i)
+    #     else:
+    #         clusters.append([i])
+
+    db = DBSCAN(eps=eps, min_samples=min_samples).fit(pts)
+    labels = db.labels_
+
+    unique_labels = set(labels) - {-1} 
+    print(f"[detect_hubs] Found {len(unique_labels)} clusters")
+    
+    clusters = [[i for i, l in enumerate(labels) if l == label] for label in unique_labels]
+    print(f"[detect_hubs] Found {len(clusters)} clusters: {[len(c) for c in clusters]} endpoints each")
+
+    ## just assign the noisy endpoints
+    noise_indices = [i for i, l in enumerate(labels) if l == -1]
+    for i in noise_indices:
         centroids = [np.mean(pts[c], axis=0) for c in clusters]
         dists = [np.linalg.norm(pts[i] - c) for c in centroids]
-        nearest = np.argmin(dists)
-        if dists[nearest] < cluster_threshold or len(clusters) >= n_hubs:
-            clusters[nearest].append(i)
-        else:
-            clusters.append([i])
-
-    print(f"[detect_hubs] Found {len(clusters)} clusters: {[len(c) for c in clusters]} endpoints each")
+        clusters[np.argmin(dists)].append(i)
 
     press_locations = []
     for cluster_indices in clusters:
@@ -35,7 +50,7 @@ def detect_hubs(endpoints, trace_list, n_hubs=2, offset_px=60, cluster_threshold
                 print(f"[detect_hubs] Trace {ep_idx} too short, skipping")
                 continue
             # trace[0] is at endpoint, pointing away from hub
-            trace_dir = trace[4] - trace[0]  # (x, y) = (col, row)
+            trace_dir = trace[4] - trace[0]  
             norm = np.linalg.norm(trace_dir)
             if norm > 0:
                 directions.append(trace_dir / norm)
@@ -45,24 +60,28 @@ def detect_hubs(endpoints, trace_list, n_hubs=2, offset_px=60, cluster_threshold
             press_locations.append(centroid)
             continue
 
+        ## do some math to find the average direction
         directions = np.array(directions)
         if len(directions) > 1:
-            median_dir = directions[len(directions) // 2]
-            cos_sims = directions @ median_dir
-            valid = directions[cos_sims > direction_cos_threshold]
+            angles = np.arctan2(directions[:, 1], directions[:, 0]) 
+            sorted_indices = np.argsort(angles)
+            directions = directions[sorted_indices]
+
+            median_dir = directions[len(directions) // 2] ## use the sorted list to get a reference
+            cos_sims = directions @ median_dir # finds similarity of reference with each direction
+            valid = directions[cos_sims > direction_cos_threshold] # checks which trace directions are actually valid
             if len(valid) == 0:
                 print(f"[detect_hubs] All directions filtered as outliers, using all")
                 valid = directions
         else:
             valid = directions
-        
         avg_dir_xy = np.mean(valid, axis=0)
         avg_dir_xy /= np.linalg.norm(avg_dir_xy)
 
-        inward_dir_xy = -avg_dir_xy
+        inward_dir_xy = -avg_dir_xy # reverse trace direction
 
         centroid_xy = np.array([centroid[1], centroid[0]])
-        press_xy = centroid_xy + inward_dir_xy * offset_px
+        press_xy = centroid_xy + inward_dir_xy * offset_px # hardcoded for now
         press_rc = np.array([press_xy[1], press_xy[0]])
 
         press_locations.append(press_rc)
