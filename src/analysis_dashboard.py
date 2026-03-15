@@ -31,9 +31,7 @@ import matplotlib.gridspec as gridspec
 
 # Recognized image filenames produced by the pipeline (in display order)
 PANEL_NAMES = [
-    ("raw_image.png", "Raw Image"),
-    # ("endpoints.png", "Endpoints"),
-    ("object_masks.png", "Object Masks"),
+    # ("raw_image.png", "Raw Image"),
     ("combined_traces.png", "Combined Traces"),
     ("divergence_point.png", "Divergence Point"),
 ]
@@ -66,12 +64,18 @@ def collect_panels(iter_dir):
     Returns list of (image_array, title) tuples.
     """
     panels = []
-
     # Fixed-name panels
     for filename, title in PANEL_NAMES:
         img = load_image(os.path.join(iter_dir, filename))
         if img is not None:
             panels.append((img, title))
+
+    # Composite: Object Masks overlaid with Endpoints (replaces individual panels)
+    masks_img = load_image(os.path.join(iter_dir, "object_masks.png"))
+    endpts_img = load_image(os.path.join(iter_dir, "endpoints.png"))
+    if masks_img is not None and endpts_img is not None:
+        composite = cv2.addWeighted(masks_img, 0.6, endpts_img, 0.4, 0)
+        panels.append((composite, "Masks + Endpoints"))
 
     # Individual trace panels
     trace_files = sorted(glob.glob(os.path.join(iter_dir, TRACE_PATTERN)))
@@ -111,9 +115,9 @@ def build_dashboard(fig, output_dir):
         # Maybe a flat directory (vision pipeline output, no iter_ subdirs)
         iter_dirs = [output_dir]
 
-    # Collect panels from all iterations
+    # Collect panels from last 3 iterations only
     all_iter_panels = []
-    for d in iter_dirs:
+    for d in iter_dirs[-3:]:
         panels = collect_panels(d)
         if panels:
             all_iter_panels.append((os.path.basename(d), panels))

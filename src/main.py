@@ -85,6 +85,7 @@ from motion_jacobi import (
 IFACE_SPEED = 0.43
 NUM_MOVES = 10
 BIMANUAL_DECLUTTER = True  # Enable bimanual mode (matches original pipeline)
+DECLUTTER_ENABLED = False  # Set False when objects are placed under cables (don't remove them)
 ENDPOINT_EXCLUSION_RADIUS = 200  # pixels in full-res; masks within this radius of an endpoint are not picked up (e.g. hubs)
 
 
@@ -207,7 +208,7 @@ def filter_hub_masks(mask_num, detic_out, endpoints):
     return filtered
 
 
-def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350):
+def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350, selected_pt=None):
     """Save a zoomed image marking the divergence point(s) the robot will act on."""
     vis = img.copy()
 
@@ -217,15 +218,18 @@ def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350):
         for pt in trace:
             cv2.circle(vis, (int(pt[0]), int(pt[1])), 2, color, -1)
 
-    # Draw divergence points with a prominent marker — div_points are (x, y)
+    # Draw divergence points: highlight selected_pt prominently, others faintly
+    primary = selected_pt if selected_pt is not None else div_points[0]
     for dp in div_points:
         x, y = int(dp[0]), int(dp[1])
-        cv2.drawMarker(vis, (x, y), (255, 0, 0),
-                       markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
-        cv2.circle(vis, (x, y), DENSITY_RADIUS, (255, 0, 0), 2)
+        if np.array_equal(dp, primary):
+            cv2.drawMarker(vis, (x, y), (255, 0, 0),
+                           markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+            cv2.circle(vis, (x, y), DENSITY_RADIUS, (255, 0, 0), 2)
+        else:
+            cv2.circle(vis, (x, y), 6, (128, 128, 128), 2)  # faint gray for non-selected
 
     # Zoom in around the primary divergence point
-    primary = div_points[0]
     x, y = int(primary[0]), int(primary[1])
     h, w = vis.shape[:2]
     r0 = max(0, y - zoom_pad)
@@ -301,11 +305,13 @@ def execute_knot_dilation(interface, centroid):
     interface.close_grippers()
 
 
-def execute_push_through(interface, div_points, img_down, trace_list, endpt_1, endpt_2):
+def execute_push_through(interface, div_points, img_down, trace_list, endpt_1, endpt_2, img_rgb=None, iter_path=None):
     """Execute push-through IP maneuver."""
     end_coord, start_coord, vec_angle, vec_dist = get_push_coords(
         div_points, img_down, trace_list, endpt_1, endpt_2, viz=False
     )
+    poi_coord = end_coord.copy()  # save before scaling (img_down space, matches div_points)
+
     end_coord *= 2      # Scale to original image size
     start_coord *= 2
 
@@ -315,8 +321,30 @@ def execute_push_through(interface, div_points, img_down, trace_list, endpt_1, e
     new_vec0 = start_coord[0] + vector_0
     new_vec1 = start_coord[1] + vector_1
 
+    # --- Sanity check: overlay start/end positions on image and save ---
+    if img_rgb is not None and iter_path is not None:
+        vis = img_rgb.copy()
+        # start_coord is the push START (pixel coords: [x, y])
+        sx, sy = int(start_coord[0]), int(start_coord[1])
+        # [new_vec0, new_vec1] is the push END
+        ex, ey = int(new_vec0), int(new_vec1)
+        # Draw start (green) and end (red) circles
+        cv2.circle(vis, (sx, sy), 18, (0, 255, 0), -1)   # green = start
+        cv2.circle(vis, (ex, ey), 18, (255, 0, 0), -1)    # red = end
+        # Draw arrow from start to end (cyan)
+        cv2.arrowedLine(vis, (sx, sy), (ex, ey), (0, 255, 255), 4, tipLength=0.15)
+        # Labels
+        cv2.putText(vis, f"START ({sx},{sy})", (sx + 20, sy - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+        cv2.putText(vis, f"END ({ex},{ey})", (ex + 20, ey - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 3)
+        save_path = os.path.join(iter_path, 'push_through_sanity.png')
+        cv2.imwrite(save_path, cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+        print(f"[SANITY CHECK] Saved push-through overlay to {save_path}")
+        print(f"[SANITY CHECK] Start (green): ({sx}, {sy}), End (red): ({ex}, {ey})")
+
     perform_push_through([new_vec0, new_vec1], start_coord, interface)
-    return vec_angle, vec_dist
+    return poi_coord, vec_angle, vec_dist
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +602,7 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
             mask_num = filter_hub_masks(mask_num, detic_out, endpoints)
 
         # Decision: Declutter or IP maneuver
-        if mask_num != -1:
+        if DECLUTTER_ENABLED and mask_num != -1:
             print("Executing declutter...")
             write_status(output_dir, f"Iter {i}: Executing declutter (removing objects)...")
             with open(log_path, "a") as f:
@@ -606,8 +634,6 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
         endpt_1 = output["start_idx"]
         endpt_2 = output["end_idx"]
 
-        save_divergence_image(img_down, div_points, trace_list, iter_path)
-
         do_push = True
         for div_pt in div_points:
             print("Classifying divergence point...")
@@ -618,6 +644,7 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
                 if centroid is not None:
                     print("Executing knot dilation...")
                     write_status(output_dir, f"Iter {i}: Executing Knot Dilation ({dense_count} dense px, area={cent_area:.1f})...")
+                    save_divergence_image(img_down, div_points, trace_list, iter_path, selected_pt=centroid)
                     execute_knot_dilation(interface, centroid)
                     with open(log_path, "a") as f:
                         f.write(f"Knot Dilation: {dense_count} dense px, area={cent_area:.2f}\n")
@@ -625,11 +652,21 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
                     break
 
         if do_push:
+            # Save divergence image BEFORE robot moves
+            try:
+                poi_coord_preview, _, _, _ = get_push_coords(
+                    div_points, img_down, trace_list, endpt_1, endpt_2, viz=False
+                )
+                save_divergence_image(img_down, div_points, trace_list, iter_path, selected_pt=poi_coord_preview)
+            except Exception:
+                save_divergence_image(img_down, div_points, trace_list, iter_path, selected_pt=div_points[0])
+
             print("Executing push-through...")
             write_status(output_dir, f"Iter {i}: Executing Push Through...")
             try:
-                vec_angle, vec_dist = execute_push_through(
-                    interface, div_points, img_down, trace_list, endpt_1, endpt_2
+                poi_coord, vec_angle, vec_dist = execute_push_through(
+                    interface, div_points, img_down, trace_list, endpt_1, endpt_2,
+                    img_rgb=img_rgb, iter_path=iter_path
                 )
                 write_status(output_dir, f"Iter {i}: Push Through complete (angle={vec_angle:.1f}°, dist={vec_dist:.1f}px).")
                 with open(log_path, "a") as f:
@@ -648,18 +685,67 @@ def run_robot_pipeline(num_endpoints, output_dir=None, viz=False, dashboard=Fals
     
 
 
+def run_vision_only(image_path, num_endpoints, output_dir=None, viz=False):
+    """Run the vision pipeline on a static image — no robot required."""
+    if not os.path.exists(image_path):
+        print(f"Error: image not found: {image_path}")
+        sys.exit(1)
+
+    timestamp = datetime.now()
+    output_dir = (output_dir and f"{output_dir}/{timestamp}") or f"{SAVE_DIR}/DATA_IROS26/{timestamp}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Loading image: {image_path}")
+    bgr = cv2.imread(image_path)
+    img_rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    img_down = cv2.resize(img_rgb, (img_rgb.shape[1] // 2, img_rgb.shape[0] // 2))
+
+    print("Initializing vision models...")
+    endpt_model = EndpointDataloader(use_hub_detect=True)
+    detic_loader = DeticDataloader()
+    detic_loader.create()
+    detic_loader.default_vocab()
+    tracer = TracerDataloader()
+    print("Vision models initialized.")
+
+    iter_path = os.path.join(output_dir, "iter_0")
+    os.makedirs(iter_path, exist_ok=True)
+    cv2.imwrite(os.path.join(iter_path, "raw_image.png"), bgr)
+
+    (bool_detic_mask, detic_mask, detic_out, endpoints,
+     trace_list, endpt_table, densities, mask_num) = run_vision_parallel(
+        img_rgb, img_down, detic_loader, endpt_model, tracer, viz=viz
+    )
+
+    if len(endpoints) != num_endpoints:
+        print(f"Warning: expected {num_endpoints} endpoints, got {len(endpoints)}")
+
+    save_object_masks_image(img_down, detic_mask, iter_path, viz)
+    save_trace_images(img_down, trace_list, endpoints, {}, iter_path, viz)
+
+    img_endpts = img_down.copy()
+    for ep in endpoints:
+        cv2.circle(img_endpts, (ep[1], ep[0]), 8, (255, 0, 0), -1)
+    cv2.imwrite(os.path.join(iter_path, 'endpoints.png'), cv2.cvtColor(img_endpts, cv2.COLOR_RGB2BGR))
+
+    print(f"\nOutput saved to: {output_dir}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Robot decluttering pipeline (parallelized vision)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python decluttering_pipeline_robot_parallel.py --tier 2
-  python decluttering_pipeline_robot_parallel.py --tier 4 --output_dir ./output --viz
+  python main.py --tier 2                              # robot mode
+  python main.py --image input.png --tier 2           # vision-only (no robot)
+  python main.py --tier 4 --output_dir ./output --viz
         """
     )
+    parser.add_argument('--image', type=str, default=None,
+                        help='Path to input image; if provided, runs vision-only (no robot)')
     parser.add_argument('--tier', type=int, required=True,
-                        help='Tier level (1-4): tier 1/2 = 4 endpoints, tier 3 = 6 endpoints, tier 4 = 8 endpoints')
+                        help='Tier level (1-8): determines expected endpoint count')
     parser.add_argument('--output_dir', type=str, default=None,
                         help='Output directory for images/logs')
     parser.add_argument('--viz', action='store_true',
@@ -668,13 +754,15 @@ Examples:
                         help='Launch live analysis dashboard (auto-refreshes every 2s)')
     args = parser.parse_args()
 
-    # Validate tier
     if args.tier not in TIER_TO_ENDPOINTS:
-        raise ValueError(f"tier must be 1, 2, 3, or 4, got {args.tier}")
+        raise ValueError(f"tier must be 1-8, got {args.tier}")
 
     num_endpoints = TIER_TO_ENDPOINTS[args.tier]
 
-    run_robot_pipeline(num_endpoints, args.output_dir, args.viz, args.dashboard)
+    if args.image:
+        run_vision_only(args.image, num_endpoints, args.output_dir, args.viz)
+    else:
+        run_robot_pipeline(num_endpoints, args.output_dir, args.viz, args.dashboard)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 from run_constants import *
 from yumi_jacobi.interface import Interface
-from motion_jacobi import goto_gripper_px
+from motion_jacobi import goto_gripper_px, _raise_to_safe_height_and_home
 
 ## if this doesnt' work, switch BrioSensor port to 1/0
 
@@ -27,22 +27,32 @@ def click_points_simple(img):
     return left_coords, right_coords
 
 
-cam = BRIOSensor(0)
+cam = BRIOSensor(1)
 interface = Interface(speed=0.5)
 interface.yumi.left.min_position  = YUMI_MIN_POS
 interface.yumi.right.min_position = YUMI_MIN_POS
 
+process = True
+arm = "placeholder"
+
 if __name__ == "__main__":
     while True:
         input("Press Enter: ")
-        interface.home()
+        if process:
+            _raise_to_safe_height_and_home(interface, "left")
+            _raise_to_safe_height_and_home(interface, "right")
+            process = False
+        else:
+            _raise_to_safe_height_and_home(interface, arm)
+        
         for _ in range(5):
             img = cam.read()
 
         point, _ = click_points_simple(img)
+        print(f"shape {img.shape}")
         plt.figure(figsize=(20, 12))
         plt.scatter(point[0], point[1])
         plt.tight_layout()
         plt.imshow(img)
         plt.show()
-        goto_gripper_px(point, interface)
+        arm = goto_gripper_px(point, interface, hover_only=True)
