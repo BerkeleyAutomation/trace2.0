@@ -132,67 +132,48 @@ def build_dashboard(fig, output_dir):
     # Most recent iteration first
     all_iter_panels = list(reversed(all_iter_panels))
 
-    RECENT_COLS = 4  # panels per row for the most recent iteration
     recent_name, recent_panels = all_iter_panels[0]
     older = all_iter_panels[1:]
 
-    # Separate divergence point panel so it can be displayed larger
-    div_idx = next((i for i, (_, t) in enumerate(recent_panels) if t == "Divergence Point"), None)
-    if False and div_idx is not None:
-        other_panels = [p for i, p in enumerate(recent_panels) if i != div_idx]
-        div_panel = recent_panels[div_idx]
-    else:
-        other_panels = recent_panels
-        div_panel = None
-
-    n_other = len(other_panels)
-    other_rows = math.ceil(n_other / RECENT_COLS) if n_other > 0 else 0
-    recent_rows = max(other_rows + (1 if div_panel is not None else 0), 1)
-    # Divergence row gets 2x height relative to other rows
-    recent_h_ratios = [1] * other_rows + ([2] if div_panel is not None else []) or [1]
-
-    DIV_SPAN = 2  # divergence point spans this many columns (centered)
-    div_col_start = (RECENT_COLS - DIV_SPAN) // 2
+    n_recent = len(recent_panels)
+    RECENT_COLS = n_recent if n_recent > 0 else 1
+    recent_rows = 1
 
     if older:
         n_older_rows = len(older)
-        max_older_cols = max(len(p) for _, p in older)
         # Recent rows get 2x height of older rows
-        outer_height_ratios = [2] * recent_rows + [1] * n_older_rows
-        total_rows = recent_rows + n_older_rows
+        outer_height_ratios = [2] + [1] * n_older_rows
+        total_rows = 1 + n_older_rows
         gs_outer = gridspec.GridSpec(total_rows, 1, figure=fig,
                                      height_ratios=outer_height_ratios, hspace=0.15)
         gs_recent = gridspec.GridSpecFromSubplotSpec(
-            recent_rows, RECENT_COLS,
-            subplot_spec=gs_outer[:recent_rows, 0],
-            height_ratios=recent_h_ratios,
+            1, RECENT_COLS,
+            subplot_spec=gs_outer[0, 0],
             hspace=0.08, wspace=0.02)
-        gs_older = gridspec.GridSpecFromSubplotSpec(
-            n_older_rows, max_older_cols,
-            subplot_spec=gs_outer[recent_rows:, 0],
-            hspace=0.08, wspace=0.02)
+        # Each older row gets its own GridSpec sized to its panel count
+        gs_older_outer = gridspec.GridSpecFromSubplotSpec(
+            n_older_rows, 1,
+            subplot_spec=gs_outer[1:, 0],
+            hspace=0.08)
         for row, (iter_name, panels) in enumerate(older):
+            n_cols = len(panels)
+            gs_row = gridspec.GridSpecFromSubplotSpec(
+                1, n_cols,
+                subplot_spec=gs_older_outer[row, 0],
+                wspace=0.02)
             for col, (img, title) in enumerate(panels):
-                ax = fig.add_subplot(gs_older[row, col])
+                ax = fig.add_subplot(gs_row[0, col])
                 ax.imshow(img)
                 ax.set_title(f"{iter_name}: {title}", fontsize=7)
                 ax.axis('off')
     else:
-        gs_recent = gridspec.GridSpec(recent_rows, RECENT_COLS, figure=fig,
-                                      height_ratios=recent_h_ratios,
+        gs_recent = gridspec.GridSpec(1, RECENT_COLS, figure=fig,
                                       hspace=0.08, wspace=0.02)
 
-    for i, (img, title) in enumerate(other_panels):
-        ax = fig.add_subplot(gs_recent[i // RECENT_COLS, i % RECENT_COLS])
+    for i, (img, title) in enumerate(recent_panels):
+        ax = fig.add_subplot(gs_recent[0, i])
         ax.imshow(img)
         ax.set_title(f"{recent_name}: {title}", fontsize=9)
-        ax.axis('off')
-
-    if div_panel is not None:
-        ax = fig.add_subplot(gs_recent[other_rows, div_col_start:div_col_start + DIV_SPAN])
-        img, title = div_panel
-        ax.imshow(img)
-        ax.set_title(f"{recent_name}: {title}", fontsize=11, fontweight='bold')
         ax.axis('off')
 
     # Show metrics as suptitle (truncated)
