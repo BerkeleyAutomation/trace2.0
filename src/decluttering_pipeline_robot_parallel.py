@@ -7,6 +7,18 @@ Same as decluttering_pipeline_robot.py but runs:
 
 Usage:
     python decluttering_pipeline_robot_parallel.py --tier <1-4> [--output_dir <dir>] [--viz]
+
+
+TODO: 
+
+SETUP FOR PYROKI 
+
+What you need to do (on the robot controller):                                                                                          
+                                                                                                                                                        
+1. Start the RAPID EGM program on the FlexPendant — the EGM session must be running before YuMiROSInterface can stream poses.                          
+2. Verify the UDP target IP in the RAPID code matches your machine's current IP. The IP is set in the ABB controller's EGM configuration (in the RAPID 
+EGMSetupUC or similar call), not in any Python file here.   
+
 """
 
 ### 2/20 Successful ran on trace_copy conda environment
@@ -47,7 +59,7 @@ import matplotlib.pyplot as plt
 
 # Robot interface
 import threading
-from yumi_realtime.controller import YuMiROSInterface
+from yumi_realtime.yumi_realtime.controller import YuMiROSInterface
 
 # Camera
 from utils.scripts.brio.brio_sensor import BRIOSensor
@@ -259,7 +271,11 @@ def initialize_robot():
     while interface.cartesian_pose_L is None or interface.cartesian_pose_R is None:
         time.sleep(0.1)
 
-    print("moving home")
+    print("moving to pre-home")
+    interface.pre_home()
+    time.sleep(2.0)  # T_RETRACT
+
+    print("moving to home")
     interface.home()
     time.sleep(4.0)  # T_HOME
 

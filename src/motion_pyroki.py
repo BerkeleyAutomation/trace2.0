@@ -67,9 +67,10 @@ XY_OFFSET            = [-0.03, 0.02]
 GRIP_DOWN_WXYZ_R = np.array([0.0, 1.0, 0.0, 0.0])
 GRIP_DOWN_WXYZ_L = np.array([0.0, 1.0, 0.0, 0.0])
 
-# ---------------------------------------------------------------------------
-# Motion settling times (seconds). Increase if the robot doesn't reach target.
-# ---------------------------------------------------------------------------
+
+## Basically PyRoki is open-loop so we need to estimate times that the robot wil take to update its pose
+## before sending the next one
+
 T_HOME    = 4.0   # time to reach home pose
 T_MOVE    = 3.0   # time to reach an intermediate waypoint
 T_CONTACT = 2.5   # time to reach contact / grasp depth
@@ -85,15 +86,22 @@ Y_BUFFER = 100
 
 # BORROWED FROM MOTION_JACOBI
 def get_world_coord_from_pixel_coord(pixel_coord, cam_intrinsics):
-    """Convert pixel [x, y] to 3-D world coordinates (identical to motion_jacobi.py)."""
+    '''
+    pixel_coord: [x, y] in pixel coordinates
+    cam_intrinsics: 3x3 camera intrinsics matrix
+    '''
     pixel_coord = np.array(pixel_coord)
-    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.04 - FOAM_DEPTH])
+    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.04-FOAM_DEPTH])
     point_3d_world = T_CAM_BASE.matrix.dot(np.r_[point_3d_cam, 1.0])
-    point_3d_world = point_3d_world[:3] / point_3d_world[3]
-    point_3d_world[0] = 0.95 - point_3d_world[0]
+    # print(point_3d_world)
+    point_3d_world = point_3d_world[:3]/point_3d_world[3]
+    point_3d_world[0] = 0.95-point_3d_world[0]
+    # point_3d_world[0] += XY_OFFSET[0]
     point_3d_world[1] += XY_OFFSET[1]
+    # print("HELLO HELLO")
     print(point_3d_world)
     point_3d_world[-1] = FOAM_DEPTH
+    # print('non-homogenous = ', point_3d_world)
     return point_3d_world
 
 
@@ -114,45 +122,56 @@ def get_gripper_rot_wxyz(yaw_rad):
 
 
 def get_closest_trace_idx(poi, trace):
-    return np.argmin(np.linalg.norm(trace - poi, axis=1))
+    return np.argmin(np.linalg.norm(np.array(trace) - np.array(poi)[None, ...], axis=1))
 
-
+## Update from motion_jacobi.py: handle non-unit vectors, and clip floating points to 1
 def vector_angle(vec1, vec2):
     cos = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
     return np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
 
 
 def vector_distance(vec1, vec2, axis=None):
-    return np.linalg.norm(vec1 - vec2, axis=axis)
-
+    return np.linalg.norm(np.array(vec1) - np.array(vec2), axis=axis)
 
 def vector_direction(vec1, vec2):
-    d = vec2 - vec1
-    return d / np.linalg.norm(d)
+    return (np.array(vec1) - np.array(vec2)) / vector_distance(vec1, vec2)
+
+
+# ---------------------------------------------------------------------------
+# I added this function, but if it throws an error just remove it and all implementation
+# ---------------------------------------------------------------------------
+
+
+def _viz_target(iface, name: str, position: np.ndarray, wxyz: np.ndarray):
+    """Visualize a planned target as a 3D frame in the viser scene."""
+    iface.server.scene.add_frame(
+        name, wxyz=wxyz, position=position,
+        axes_length=0.05, axes_radius=0.005, origin_radius=0.015,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Gripper helpers
 # ---------------------------------------------------------------------------
 
-def _open_grippers(iface):
+def open_grippers(iface):
     iface.call_gripper('left',  False, True)
     iface.call_gripper('right', False, True)
     time.sleep(T_GRIPPER)
 
 
-def _close_grippers(iface):
+def close_grippers(iface):
     iface.call_gripper('left',  True, True)
     iface.call_gripper('right', True, True)
     time.sleep(T_GRIPPER)
 
 
-def _close_gripper(iface, side):
+def close_gripper(iface, side):
     iface.call_gripper(side, True, True)
     time.sleep(T_GRIPPER)
 
 
-def _open_gripper(iface, side):
+def open_gripper(iface, side):
     iface.call_gripper(side, False, True)
     time.sleep(T_GRIPPER)
 
@@ -174,14 +193,14 @@ _BIN_R_ROT  = np.array([[ 0.96381043, -0.19505362, -0.18172382],
 _BIN_R_WXYZ = _rot_matrix_to_wxyz(_BIN_R_ROT)
 
 
-def _pipeline_drop_in_bin(iface, arm='left'):
+def pipeline_drop_in_bin(iface, arm='left'):
     """Move to bin and open gripper. Mirrors pipeline_drop_in_bin in motion_jacobi.py."""
     if arm in ('left', 'both'):
         iface.update_target_pose('left',  _BIN_L_POS, _BIN_L_WXYZ, False, True)
     if arm in ('right', 'both'):
         iface.update_target_pose('right', _BIN_R_POS, _BIN_R_WXYZ, False, True)
     time.sleep(T_MOVE)
-    _open_grippers(iface)
+    open_grippers(iface)
 
 
 # ---------------------------------------------------------------------------
@@ -193,9 +212,13 @@ def goto_gripper_px(pixel: np.ndarray, iface) -> str:
     Move the appropriate arm's gripper to a pixel location on the work surface.
     Returns the arm name used ('left' or 'right').
     """
+    ### added a pre_home safety measure (you can delete this if it causes problems)
+    iface.pre_home()
+    time.sleep(T_RETRACT)
+
     iface.home()
     time.sleep(T_HOME)
-    _close_grippers(iface)
+    close_grippers(iface)
 
     world = get_world_coord_from_pixel_coord(pixel, CAM_INTR)
 
@@ -212,6 +235,7 @@ def goto_gripper_px(pixel: np.ndarray, iface) -> str:
     first = np.array([world[0], world[1], depth_val + 0.05])  # above POI
     final = np.array([world[0], world[1], depth_val])          # at foam depth
 
+    _viz_target(iface, "motion/goto/contact", final, wxyz)
     iface.update_target_pose(arm, first, wxyz, True, True)
     time.sleep(T_MOVE)
     iface.update_target_pose(arm, final, wxyz, True, True)
@@ -242,14 +266,20 @@ def rotate_gripper(arm: str, iface):
     wxyz_pos90  = np.array((rot_pos90 @ current_so3).wxyz)
     wxyz_neg90  = np.array((rot_neg90 @ current_so3).wxyz)
 
+    _viz_target(iface, "motion/rotate/pos", pos, wxyz_pos90)
     iface.update_target_pose(arm, pos, wxyz_pos90, True, True)
     time.sleep(T_MOVE)
     iface.update_target_pose(arm, pos, wxyz_neg90, True, True)
     time.sleep(T_MOVE)
 
+    ## same here, can delete the pre_home
+    
+    iface.pre_home()
+    time.sleep(T_RETRACT)
+
     iface.home()
     time.sleep(T_HOME)
-    _close_grippers(iface)
+    close_grippers(iface)
 
 
 def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None):
@@ -258,9 +288,13 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
     poi_trace  : pixel [x, y] — push target (divergence point)
     cen_poi_vec: pixel [x, y] — push start (near the cable)
     """
+    ### added a pre_home, but can be deleted if necessary
+    iface.pre_home()
+    time.sleep(T_RETRACT)
+
     iface.home()
     time.sleep(T_HOME)
-    _close_grippers(iface)
+    close_grippers(iface)
 
     place1 = get_world_coord_from_pixel_coord(cen_poi_vec, CAM_INTR)
     place2 = get_world_coord_from_pixel_coord(poi_trace,   CAM_INTR)
@@ -278,11 +312,14 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
         place2 = np.array([place2[0], place2[1], FOAM_DEPTH_L])
         wxyz   = GRIP_DOWN_WXYZ_L
 
+    ### we add 0.07 in the z before the push through (intermediate position). we can probably play around with this
     intermediate = place1 + np.array([0, 0, 0.07])
 
     print("PERFORMING PUSH THROUGH")
     print(place1, place2)
 
+    _viz_target(iface, "motion/push/start", place1, wxyz)
+    _viz_target(iface, "motion/push/end",   place2, wxyz)
     iface.update_target_pose(arm, intermediate, wxyz, True, True)  # above start
     time.sleep(T_MOVE)
     iface.update_target_pose(arm, place1, wxyz, True, True)         # contact at start
@@ -294,9 +331,13 @@ def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None)
     iface.update_target_pose(arm, retract, wxyz, True, True)
     time.sleep(T_RETRACT)
 
+    # can be deleted
+    iface.pre_home()
+    time.sleep(T_RETRACT)
+
     iface.home()
     time.sleep(T_HOME)
-    _close_grippers(iface)
+    close_grippers(iface)
     return True
 
 
@@ -309,7 +350,7 @@ def perform_point_grasp_and_bin_drop_pipeline(center, angle, interface, img=None
     iface    = interface
 
     print(waypoint)
-    _open_grippers(iface)
+    open_grippers(iface)
 
     if waypoint[0] > 1750:
         arm    = 'right'
@@ -325,15 +366,19 @@ def perform_point_grasp_and_bin_drop_pipeline(center, angle, interface, img=None
 
     print(f"{angle=}")
 
+    _viz_target(iface, "motion/point_grasp/grasp", place1, wxyz)
     iface.update_target_pose(arm, intermediate, wxyz, False, True)  # approach
     time.sleep(T_MOVE)
     iface.update_target_pose(arm, place1, wxyz, False, True)         # grasp depth
     time.sleep(T_CONTACT)
-    _close_gripper(iface, arm)
+    close_gripper(iface, arm)
 
     iface.update_target_pose(arm, intermediate, wxyz, True, True)    # retract
     time.sleep(T_RETRACT)
-    _pipeline_drop_in_bin(iface, arm=arm)
+    pipeline_drop_in_bin(iface, arm=arm)
+
+    iface.pre_home()
+    time.sleep(T_RETRACT)
 
     iface.home()
     time.sleep(T_HOME)
@@ -348,7 +393,7 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     waypoint_r = np.array([center_r[0], center_r[1]])
     iface      = interface
 
-    _open_grippers(iface)
+    open_grippers(iface)
 
     place1_l       = get_world_coord_from_pixel_coord(waypoint_l, DEC_CAM_INTR)
     place1_l       = np.array([place1_l[0], place1_l[1], DEC_FIXED_DEPTH_OBJ_L])
@@ -360,6 +405,8 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     intermediate_r = np.array([place1_r[0], place1_r[1], 0.19])
     wxyz_r         = get_gripper_rot_wxyz(np.radians(angle_r))
 
+    _viz_target(iface, "motion/bimanual/grasp_l", place1_l, wxyz_l)
+    _viz_target(iface, "motion/bimanual/grasp_r", place1_r, wxyz_r)
     # Both arms approach
     iface.update_target_pose('left',  intermediate_l, wxyz_l, False, True)
     iface.update_target_pose('right', intermediate_r, wxyz_r, False, True)
@@ -369,14 +416,17 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     iface.update_target_pose('left',  place1_l, wxyz_l, False, True)
     iface.update_target_pose('right', place1_r, wxyz_r, False, True)
     time.sleep(T_CONTACT)
-    _close_grippers(iface)
+    close_grippers(iface)
 
     # Both arms retract
     iface.update_target_pose('left',  intermediate_l, wxyz_l, True, True)
     iface.update_target_pose('right', intermediate_r, wxyz_r, True, True)
     time.sleep(T_RETRACT)
 
-    _pipeline_drop_in_bin(iface, arm='both')
+    pipeline_drop_in_bin(iface, arm='both')
+
+    iface.pre_home()
+    time.sleep(T_RETRACT)
 
     iface.home()
     time.sleep(T_HOME)

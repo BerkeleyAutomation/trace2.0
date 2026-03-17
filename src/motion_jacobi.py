@@ -278,6 +278,7 @@ def get_poi_and_vec_for_push(push_coord, img_rgb, trace, place_box_img_W=150, ed
 def get_closest_trace_idx(poi, trace):
     return np.argmin(np.linalg.norm(np.array(trace) - np.array(poi)[None, ...], axis=1))
 
+## H
 def vector_angle(vec1, vec2):
     return np.degrees(np.arccos(np.dot(np.array(vec1), np.array(vec2))))
 
