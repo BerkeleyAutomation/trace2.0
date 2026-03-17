@@ -27,7 +27,7 @@ def click_points_simple(img):
     return left_coords, right_coords
 
 
-cam = BRIOSensor(1)
+cam = BRIOSensor(0)
 interface = Interface(speed=0.5)
 interface.yumi.left.min_position  = YUMI_MIN_POS
 interface.yumi.right.min_position = YUMI_MIN_POS
