@@ -46,7 +46,8 @@ matplotlib.use('Agg')  # non-interactive backend; avoids tkinter conflicts with 
 import matplotlib.pyplot as plt
 
 # Robot interface
-from yumi_jacobi.interface import Interface
+import threading
+from yumi_realtime.controller import YuMiROSInterface
 
 # Camera
 from utils.scripts.brio.brio_sensor import BRIOSensor
@@ -73,7 +74,7 @@ from utils.tracer.tusk_pipeline.tracer import TraceEnd
 from masker import get_mask
 
 # Robot motions
-from motion_jacobi import (
+from motion_pyroki import (
     goto_gripper_px,
     rotate_gripper,
     perform_push_through,
@@ -83,7 +84,6 @@ from motion_jacobi import (
 )
 
 # Hardcoded constants
-IFACE_SPEED = 0.43
 NUM_MOVES = 10
 BIMANUAL_DECLUTTER = True  # Enable bimanual mode (matches original pipeline)
 ENDPOINT_EXCLUSION_RADIUS = 200  # pixels in full-res; masks within this radius of an endpoint are not picked up (e.g. hubs)
@@ -246,19 +246,35 @@ def save_divergence_image(img, div_points, trace_list, iter_path, zoom_pad=350):
 
 
 def initialize_robot():
-    """Initialize YuMi robot interface."""
+    """Initialize YuMi robot interface using yumi_realtime."""
     print("creating interface")
-    interface = Interface(IFACE_SPEED)
-    interface.yumi.left.min_position = YUMI_MIN_POS
-    interface.yumi.right.min_position = YUMI_MIN_POS
-    interface.yumi.left.max_position = YUMI_MAX_POS
-    interface.yumi.right.max_position = YUMI_MAX_POS
+    interface = YuMiROSInterface()
+
+    # run() is a blocking 150Hz control loop — start it in a background thread
+    t = threading.Thread(target=interface.run, daemon=True)
+    t.start()
+
+    # Wait until joint state callbacks have fired (cartesian_pose populated)
+    print("waiting for interface to be ready")
+    while interface.cartesian_pose_L is None or interface.cartesian_pose_R is None:
+        time.sleep(0.1)
+
     print("moving home")
     interface.home()
-    print("callibrating grippers")
-    interface.calibrate_grippers()
-    interface.close_grippers()
-    interface.open_grippers()
+    time.sleep(4.0)  # T_HOME
+
+    print("calibrating grippers")
+    interface.calib_gripper('left')
+    interface.calib_gripper('right')
+
+    interface.call_gripper('left',  False, True)
+    interface.call_gripper('right', False, True)
+    time.sleep(1.0)  # T_GRIPPER
+
+    interface.call_gripper('left',  True, True)
+    interface.call_gripper('right', True, True)
+    time.sleep(1.0)
+
     return interface
 
 

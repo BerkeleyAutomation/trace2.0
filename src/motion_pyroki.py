@@ -36,6 +36,8 @@ from divergencecopy import *  # KEEPOUT_DIST, SAVE_DIR, WHITE, visualize_multipl
 # Camera intrinsics and depth constants (same values as motion_jacobi.py)
 # ---------------------------------------------------------------------------
 
+## Currently does not use the child directory's camera calibration (*IMPORTANT FOR FUTURE CALIBRATION)
+
 T_CAM_BASE = RigidTransform.load(
     "/home/justinyu/multicable-decluttering/decluttering/scripts/brio/brio_to_world_bww.tf"
 ).as_frames(from_frame="brio", to_frame="base_link")
@@ -81,7 +83,7 @@ T_RETRACT = 2.0   # time to retract after grasp
 X_BUFFER = 250
 Y_BUFFER = 100
 
-
+# BORROWED FROM MOTION_JACOBI
 def get_world_coord_from_pixel_coord(pixel_coord, cam_intrinsics):
     """Convert pixel [x, y] to 3-D world coordinates (identical to motion_jacobi.py)."""
     pixel_coord = np.array(pixel_coord)
