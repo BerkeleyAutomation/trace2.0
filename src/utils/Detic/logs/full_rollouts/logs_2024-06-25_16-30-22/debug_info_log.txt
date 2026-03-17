@@ -1,0 +1,31 @@
+16:30:22 DEBUG    Starting sync
+16:30:22 DEBUG    Ending sync
+16:30:22 DEBUG    Starting sync
+16:30:22 DEBUG    Ending sync
+16:30:23 DEBUG    Starting sync
+16:30:24 DEBUG    Ending sync
+16:30:24 DEBUG    Starting sync
+16:30:24 DEBUG    Ending sync
+16:30:24 DEBUG    Starting sync
+16:30:25 DEBUG    Ending sync
+16:30:25 DEBUG    Starting sync
+16:30:25 DEBUG    Ending sync
+16:30:25 DEBUG    Starting sync
+16:30:26 DEBUG    Ending sync
+16:30:26 DEBUG    Starting sync
+16:30:28 DEBUG    Ending sync
+16:30:29 DEBUG    Starting sync
+16:30:29 DEBUG    Ending sync
+16:30:30 DEBUG    Starting sync
+16:30:30 DEBUG    Ending sync
+16:30:30 DEBUG    Starting sync
+16:30:31 DEBUG    Ending sync
+16:30:31 DEBUG    Starting sync
+16:30:31 DEBUG    Ending sync
+16:30:31 DEBUG    Starting sync
+16:30:31 DEBUG    Ending sync
+16:31:13 INFO     Started Photoneo PhoXi 1703005
+16:31:13 DEBUG    Reading frames from Photoneo PhoXi 1703005...
+16:31:15 DEBUG    Reading from Photoneo PhoXi 1703005 took 1.24s
+16:31:15 INFO     Stopped Photoneo PhoXi 1703005
+16:31:17 INFO     [Checkpointer] Loading from https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth ...

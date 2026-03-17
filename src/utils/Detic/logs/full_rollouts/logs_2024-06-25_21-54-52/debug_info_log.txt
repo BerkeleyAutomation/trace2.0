@@ -1,0 +1,9 @@
+21:54:55 Level 25 IP Moves Executed: 0
+21:54:58 WARNING  PhoXi is already started
+21:55:45 Level 25 Executing Cable Endpoint Verification (CEV-IP)
+21:56:10 WARNING  PhoXi is already started
+21:56:12 WARNING  PhoXi is already started
+21:56:27 Level 25 Raw image saved to ./logs/full_rollouts/logs_2024-06-25_21-54-52/images/untraced_raw20240625-215627.png
+21:56:29 Level 25 Image saved to ./logs/full_rollouts/logs_2024-06-25_21-54-52/images/trace20240625-215627.png
+21:56:29 Level 25 Trace saved to ./logs/full_rollouts/logs_2024-06-25_21-54-52/traces/trace_coords20240625-215627.png
+21:56:29 Level 25 Endpoints saved to ./logs/full_rollouts/logs_2024-06-25_21-54-52/traces/endpoints20240625-215627.png

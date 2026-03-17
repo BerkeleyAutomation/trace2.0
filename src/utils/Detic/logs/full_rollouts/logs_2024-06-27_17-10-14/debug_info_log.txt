@@ -1,0 +1,4 @@
+17:10:36 WARNING  Jump in first 4 joints, aborting
+17:10:36 WARNING  Retrying planning...
+17:16:47 Level 25 IP Moves Executed: 0
+17:16:48 WARNING  PhoXi is already started

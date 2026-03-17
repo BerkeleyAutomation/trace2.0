@@ -2,3 +2,9 @@ output/*
 src/utils/scripts/test/logs/full_rollouts
 *.pyc
 *.pyo
+*.pth
+*.sh
+*.gif
+yumi_realtime/Miniforge3-Linux-x86_64.sh
+yumi_realtime/data/media/
+src/utils/tracer/models/

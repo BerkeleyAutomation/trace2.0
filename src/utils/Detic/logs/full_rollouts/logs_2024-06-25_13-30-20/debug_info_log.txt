@@ -1,0 +1,15 @@
+13:30:21 DEBUG    Starting sync
+13:30:21 DEBUG    Ending sync
+13:30:21 DEBUG    Starting sync
+13:30:21 DEBUG    Ending sync
+13:30:21 DEBUG    Starting sync
+13:30:22 DEBUG    Ending sync
+13:30:22 DEBUG    Starting sync
+13:30:22 DEBUG    Ending sync
+13:30:22 DEBUG    Starting sync
+13:30:24 DEBUG    Ending sync
+13:30:26 INFO     Started Photoneo PhoXi 1703005
+13:30:26 DEBUG    Reading frames from Photoneo PhoXi 1703005...
+13:30:27 DEBUG    Reading from Photoneo PhoXi 1703005 took 1.22s
+13:30:27 INFO     Stopped Photoneo PhoXi 1703005
+13:30:30 INFO     [Checkpointer] Loading from https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth ...

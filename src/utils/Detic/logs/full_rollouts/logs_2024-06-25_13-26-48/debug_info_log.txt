@@ -1,0 +1,16 @@
+13:26:49 DEBUG    Starting sync
+13:26:49 DEBUG    Ending sync
+13:26:49 DEBUG    Starting sync
+13:26:49 DEBUG    Ending sync
+13:26:49 DEBUG    Starting sync
+13:26:50 DEBUG    Ending sync
+13:26:50 DEBUG    Starting sync
+13:26:50 DEBUG    Ending sync
+13:26:50 DEBUG    Starting sync
+13:26:53 DEBUG    Ending sync
+13:26:53 WARNING  Jump in first 4 joints, aborting
+13:26:53 WARNING  Retrying planning...
+13:26:54 WARNING  Jump in first 4 joints, aborting
+13:26:54 WARNING  Retrying planning...
+13:26:54 WARNING  Jump in first 4 joints, aborting
+13:26:54 WARNING  Retrying planning...

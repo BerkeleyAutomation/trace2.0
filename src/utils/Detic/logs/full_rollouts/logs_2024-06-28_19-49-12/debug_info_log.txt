@@ -1,0 +1,100 @@
+19:49:13 DEBUG    Starting sync
+19:49:13 DEBUG    Ending sync
+19:49:13 DEBUG    Starting sync
+19:49:13 DEBUG    Ending sync
+19:49:13 DEBUG    Starting sync
+19:49:14 DEBUG    Ending sync
+19:49:14 DEBUG    Starting sync
+19:49:14 DEBUG    Ending sync
+19:49:14 DEBUG    Starting sync
+19:49:15 DEBUG    Ending sync
+19:49:15 DEBUG    Starting sync
+19:49:15 DEBUG    Ending sync
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+19:49:15 WARNING  Jump in first 4 joints, aborting
+19:49:15 WARNING  Retrying planning...
+20:07:23 WARNING  No such comm: 987da0cdd85f4dfb8c15a66bc905319e
+20:07:23 DEBUG    Current comms: []
+20:12:00 WARNING  No such comm: 31a7cba3572544ae869e72fae1dc6bbf
+20:12:00 DEBUG    Current comms: []
+20:13:04 WARNING  No such comm: 5d7360e4c07542b0ac6dc2a26b78f7ee
+20:13:04 DEBUG    Current comms: []
+20:14:10 WARNING  No such comm: 03583567500340908d5c7a42666e83f4
+20:14:10 DEBUG    Current comms: []
+20:16:32 WARNING  No such comm: a35e423f1c014a549c25909e73ae005e
+20:16:32 DEBUG    Current comms: []
+20:17:21 WARNING  No such comm: b991200b55ff43efb6db09a7f1bc6343
+20:17:21 DEBUG    Current comms: []
+20:21:52 WARNING  No such comm: 707e617715ee44a49d6e70af644913e6
+20:21:52 DEBUG    Current comms: []
+20:22:47 WARNING  No such comm: a4c775fa12a24324908be04a87ec24b1
+20:22:47 DEBUG    Current comms: []
+20:25:04 WARNING  No such comm: fe55bf61644548f1b4314b2ad0392f31
+20:25:04 DEBUG    Current comms: []
+20:26:23 WARNING  No such comm: 8086e6fdff344156bbf82d4cab1610cc
+20:26:23 DEBUG    Current comms: []
+20:27:54 WARNING  No such comm: 5b80cb1c072845da82904e5fced951b7
+20:27:54 DEBUG    Current comms: []
+20:29:05 WARNING  No such comm: 59ea1ff605d54500aa559993f213090b
+20:29:05 DEBUG    Current comms: []
+20:29:59 WARNING  No such comm: c1423eac0e75482f9f92d832fd89bc77
+20:29:59 DEBUG    Current comms: []
+20:31:43 WARNING  No such comm: 558762f51a9c4c96b7ae6080c1db49cf
+20:31:43 DEBUG    Current comms: []
+20:32:36 WARNING  No such comm: 4fabf70943e54006a67315241cc88932
+20:32:36 DEBUG    Current comms: []
+20:33:22 WARNING  No such comm: 15bc6d4645814387a08dafda4a79dbf9
+20:33:22 DEBUG    Current comms: []
+20:34:21 WARNING  No such comm: 11250df1df5247e482d618df03c03609
+20:34:21 DEBUG    Current comms: []
+20:35:43 WARNING  No such comm: 5fcf2046da5c499493076c907a0e1e04
+20:35:43 DEBUG    Current comms: []
+20:36:35 WARNING  No such comm: 44d98c37e85148d08e60514125b6a259
+20:36:35 DEBUG    Current comms: []
+20:37:45 WARNING  No such comm: fc794c3ebeff441db093aa943bdefc5a
+20:37:45 DEBUG    Current comms: []
+20:38:22 WARNING  No such comm: 6bd03af7cbd14498935c817afb89e919
+20:38:22 DEBUG    Current comms: []
+20:39:12 WARNING  No such comm: 0cd749d867b040909c00864964e84035
+20:39:12 DEBUG    Current comms: []
+20:40:09 WARNING  No such comm: e77e0f969aa74f828d432026da055610
+20:40:09 DEBUG    Current comms: []
+20:40:47 WARNING  No such comm: 577de07ec10a4caba1c17fbebaa4a11e
+20:40:47 DEBUG    Current comms: []
+20:41:52 WARNING  No such comm: d05e3b22b3bd4f7ebd00f388360268c7
+20:41:52 DEBUG    Current comms: []
+20:42:35 WARNING  No such comm: ed5927629bf9409f940b39845ca702d1
+20:42:35 DEBUG    Current comms: []
+20:42:57 WARNING  No such comm: a4c197ca00a84d03a63a02e8ffdbfac5
+20:42:57 DEBUG    Current comms: []
+20:44:08 WARNING  No such comm: 23149532f3074d6390901ece0984cfeb
+20:44:08 DEBUG    Current comms: []
+20:44:58 WARNING  No such comm: 0e99ac1bbc304dc0b28028ea13814124
+20:44:58 DEBUG    Current comms: []

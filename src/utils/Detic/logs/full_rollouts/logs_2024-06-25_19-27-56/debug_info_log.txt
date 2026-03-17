@@ -1,0 +1,30 @@
+19:27:56 DEBUG    Starting sync
+19:27:56 DEBUG    Ending sync
+19:27:56 DEBUG    Starting sync
+19:27:56 DEBUG    Ending sync
+19:27:56 DEBUG    Starting sync
+19:27:57 DEBUG    Ending sync
+19:27:57 DEBUG    Starting sync
+19:27:57 DEBUG    Ending sync
+19:27:57 DEBUG    Starting sync
+19:27:58 DEBUG    Ending sync
+19:27:58 DEBUG    Starting sync
+19:27:58 DEBUG    Ending sync
+19:27:58 DEBUG    Starting sync
+19:27:59 DEBUG    Ending sync
+19:27:59 DEBUG    Starting sync
+19:28:01 DEBUG    Ending sync
+19:28:02 DEBUG    Starting sync
+19:28:02 DEBUG    Ending sync
+19:28:03 DEBUG    Starting sync
+19:28:04 DEBUG    Ending sync
+19:28:05 DEBUG    Starting sync
+19:28:07 DEBUG    Ending sync
+19:28:08 DEBUG    Starting sync
+19:28:08 DEBUG    Ending sync
+19:28:08 DEBUG    Starting sync
+19:28:10 DEBUG    Ending sync
+21:12:04 WARNING  Failed to start Photoneo PhoXi
+21:12:04 INFO     Started Photoneo PhoXi 1703005
+21:12:04 DEBUG    Reading frames from Photoneo PhoXi 1703005...
+21:12:04 ERROR    PhoXi sensor disconnected, check PhoXiControl

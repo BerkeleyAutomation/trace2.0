@@ -1,0 +1,1 @@
+22:04:46 ERROR    PhoXi sensor disconnected, check PhoXiControl

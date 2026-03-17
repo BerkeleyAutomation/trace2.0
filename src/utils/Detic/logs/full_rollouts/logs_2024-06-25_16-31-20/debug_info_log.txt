@@ -1,0 +1,16 @@
+16:31:21 DEBUG    Starting sync
+16:31:21 DEBUG    Ending sync
+16:31:21 DEBUG    Starting sync
+16:31:21 DEBUG    Ending sync
+16:31:21 DEBUG    Starting sync
+16:31:22 DEBUG    Ending sync
+16:31:22 DEBUG    Starting sync
+16:31:22 DEBUG    Ending sync
+16:31:23 DEBUG    Starting sync
+16:31:24 DEBUG    Ending sync
+16:31:24 DEBUG    Starting sync
+16:31:24 DEBUG    Ending sync
+16:31:24 DEBUG    Starting sync
+16:31:34 INFO     Started Photoneo PhoXi 1703005
+16:31:34 DEBUG    Reading frames from Photoneo PhoXi 1703005...
+16:31:35 DEBUG    Reading from Photoneo PhoXi 1703005 took 1.4s

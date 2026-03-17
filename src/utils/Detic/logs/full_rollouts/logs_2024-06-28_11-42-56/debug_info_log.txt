@@ -1,0 +1,9 @@
+11:43:04 Level 25 IP Moves Executed: 0
+11:43:05 WARNING  PhoXi is already started
+11:43:16 Level 25 Executing Retrace Uncertainty Disambiguation (RUG-IP)
+11:43:31 WARNING  PhoXi is already started
+11:43:33 WARNING  PhoXi is already started
+11:43:41 Level 25 Raw image saved to ./logs/full_rollouts/logs_2024-06-28_11-42-56/images/untraced_raw20240628-114341.png
+11:43:44 Level 25 Image saved to ./logs/full_rollouts/logs_2024-06-28_11-42-56/images/trace20240628-114341.png
+11:43:44 Level 25 Trace saved to ./logs/full_rollouts/logs_2024-06-28_11-42-56/traces/trace_coords20240628-114341.png
+11:43:44 Level 25 Endpoints saved to ./logs/full_rollouts/logs_2024-06-28_11-42-56/traces/endpoints20240628-114341.png

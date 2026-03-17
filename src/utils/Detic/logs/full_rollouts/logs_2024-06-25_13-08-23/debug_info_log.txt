@@ -1,0 +1,6 @@
+13:08:24 DEBUG    Starting sync
+13:08:24 DEBUG    Ending sync
+13:08:24 DEBUG    Starting sync
+13:08:24 DEBUG    Ending sync
+13:08:24 DEBUG    Starting sync
+13:08:25 DEBUG    Ending sync
