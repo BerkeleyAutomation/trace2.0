@@ -3,10 +3,10 @@ sys.path.append('/home/justinyu/multicable-decluttering/yumi_jacobi')
 sys.path.append('/home/justinyu/multicable-decluttering/')
 
 # from yumi_jacobi.interface import Interface
-from decluttering.scripts.brio.brio_sensor import BRIOSensor
+from utils.scripts.brio.brio_sensor import BRIOSensor
 
 YUMI_DIR = '/home/justinyu/multicable-decluttering/yumi_jacobi/starter_examples/AUTOLAB_BWW_YuMi.jacobi-project'
-SAVE_DIR = '/home/justinyu/multicable-decluttering/trace/output/'
+SAVE_DIR = '/home/justinyu/multicable-decluttering/decluttering/src/ICRA_FIGURES/'
 YUMI_MIN_POS = [-2.94, -2.350, -2.94, -2.16, -5.00, -1.54, -3.99]
 YUMI_MAX_POS = [2.9409, 0.7592, 2.9409, 1.2, 5.00, 2.4086, 3.8]
 

@@ -8,8 +8,10 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 from scipy.ndimage import convolve
 from skimage.morphology import skeletonize
-from decluttering.src.run_constants import *
+from run_constants import *
 from utils.tracer.tusk_pipeline.tracer import TraceEnd
+from masker import get_mask
+from white_cable_masking import get_mask as get_white_mask
 
 
 def visualize_multiple_paths(img, path_list, color_list=None, heat_thresh=None, black=False):
@@ -104,6 +106,302 @@ def div_points_from_mask(pts_of_interest: np.ndarray, endpts: np.ndarray,
             divergence_pts = np.append(divergence_pts, np.array([poi]), axis=0)
     return divergence_pts
 
+
+def get_trace_list_colored(img: np.ndarray, endpts: np.ndarray, tracer, viz=False, bimanual_declutter = False) -> tuple:
+    """
+    Given the raw image and detected endpoints, returns
+    - a list of traces (x, y pixel coordinates) for each endpoint
+    - a table of endpoint mappings from start to end (-1: no end)
+    - a list of densities along each trace (raw, padded with 4*0)
+    """
+    img_up = img.copy()
+    img = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))
+    trace_list    = []
+    endpt_table   = []
+    densities_nrm = []
+    densities_pad = []
+    mask_hit_list = []
+    
+    learned_tracer  = tracer.tracer
+    analytic_tracer = tracer.analytic_tracer
+
+    L = len(endpts)
+    
+    if viz:
+        plt.close('all')
+        fig, axs = plt.subplots(2, (L+1)//2, figsize=(24, 12))
+
+    min_condition_pts = getattr(getattr(learned_tracer, "trace_config", None), "condition_len", 3)
+
+    for ep_idx in range(L):
+        img_mask = get_mask(img_up, endpts[ep_idx])
+        img_mask = cv2.cvtColor(img_mask, cv2.COLOR_GRAY2RGB)
+        start_pts, analytic_trace_end = analytic_tracer.trace(img_mask, np.array(endpts[ep_idx]), path_len=3)
+        start_pts = np.array(start_pts) if start_pts is not None else np.empty((0, 2))
+
+        filtered_endpts = copy.deepcopy(endpts)
+        filtered_endpts[ep_idx] = np.array([-100, -100]) # dummy values filter out current endpoint
+
+        if len(start_pts) < min_condition_pts:
+            print(
+                f"Analytic tracer returned {len(start_pts)} start point(s) for trace {ep_idx}, "
+                f"requires >= {min_condition_pts}. Falling back to short analytic trace."
+            )
+            trace_path = np.flip(start_pts, axis=1) if start_pts.size else np.array([endpts[ep_idx][::-1]])
+            trace_end = analytic_trace_end
+            t_endpoint = None
+            densities = np.array([])
+            mask_num = -1
+        else:
+            output = learned_tracer.trace(img_mask, start_pts, filtered_endpts, path_len=250, use_vit=False)
+            trace_path  = np.flip(output["trace"], axis=1)
+            trace_end   = output["trace_end"]
+            t_endpoint  = output["t_endpoint"]
+            densities   = output["densities"]
+            mask_num = output["mask_num"]
+
+        print(f"mask_num for trace {ep_idx}:", mask_num)
+        print(f"Trace end for trace {ep_idx}:", trace_end)
+        trace_list.append(trace_path)
+        mask_hit_list.append(mask_num)
+
+        if trace_end == TraceEnd.ENDPOINT and t_endpoint is not None:
+            equality = np.all(filtered_endpts == t_endpoint, axis=1)
+            match_idx = np.nonzero(equality)[0]
+            endpt_table.append([ep_idx, int(match_idx[0]) if len(match_idx) > 0 else -1])
+        
+        elif trace_end == TraceEnd.FINISHED or trace_end == TraceEnd.RETRACE:
+            endpt_table.append([ep_idx, -1])
+            
+        elif trace_end == TraceEnd.EDGE:
+            print(f"\nHit edge of trace, appending [{ep_idx}, -1]")
+            endpt_table.append([ep_idx, -1])
+        else:
+            endpt_table.append([ep_idx, -1])
+
+        ### DENSE CODE ###
+        densities = np.array(densities)
+        if densities.size == 0:
+            density_norm = np.array([])
+        else:
+            density_range = np.max(densities) - np.min(densities)
+            if density_range == 0:
+                density_norm = np.zeros_like(densities)
+            else:
+                density_norm = (densities - np.min(densities)) / density_range
+        
+        density_pad0 = np.concatenate((np.zeros(4), density_norm))
+        densities_nrm.append(density_norm)
+        densities_pad.append(density_pad0)
+
+    ###plt###
+        if viz:
+            ax = axs.flat[ep_idx]
+            ax.imshow(visualize_multiple_paths(img, [np.array(trace_path)],
+                    [density_pad0], heat_thresh=-1)) # All densities
+            ax.scatter(endpts[ep_idx][1], endpts[ep_idx][0], c="blue", s=25)
+            ax.axis("off")
+    
+    if viz:
+        plt.show()
+
+    def plot(dir, ep=True):
+        if ep:
+            for endpt in endpts:
+                plt.scatter(endpt[1], endpt[0], c="blue", s=100)
+        plt.tight_layout()
+        plt.close()
+
+    if viz:
+        misc = f"Heatmap for {L} Traces\nHigh (red), Low (green), [Endpoint (blue)]"
+        fig.suptitle(f"Density {misc}")
+        plot("solo", ep=False)
+
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list,
+                    densities_pad, heat_thresh=-1)) # All densities
+        plt.title(f"Density {misc}")
+        plot("multi")
+        
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list,
+                    densities_pad, heat_thresh=DENSITY_THRESH))
+        plt.title(f"Density (> {DENSITY_THRESH}) {misc}")
+        plot("thresh")
+        
+        plt.figure(figsize=(16, 12))
+        plt.hist(np.concatenate(densities_nrm), bins=50, edgecolor='black')
+        plt.title(f"Density Histogram for {L} Traces")
+        plot("hist", ep=False)
+
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list, [COLORS[i % len(COLORS)] for i in range(L)]))
+        plt.title(f"Trace Map for All {L} Traces")
+        plot("trace")
+        plt.show()
+    ########
+    
+    # Old mask hit logic; returns only one mask hit where now we want all
+    print(f"Mask hit list: {mask_hit_list}")
+    mask_hit_list = np.array([int(mask)-1 for mask in mask_hit_list if mask != -1])
+    
+    if not bimanual_declutter:
+        mask_hit = np.argwhere(mask_hit_list > -1)
+        
+        if len(mask_hit) > 0:
+            mask_hit_list = mask_hit_list[mask_hit[0]] # If we hit any mask, just return the first
+        else:
+            mask_hit_list = -1
+    
+    return trace_list, endpt_table, densities_nrm, mask_hit_list
+
+def get_trace_list_masking(img: np.ndarray, endpts: np.ndarray, tracer, viz=False, bimanual_declutter = False) -> tuple:
+    """
+    Given the raw image and detected endpoints, returns
+    - a list of traces (x, y pixel coordinates) for each endpoint
+    - a table of endpoint mappings from start to end (-1: no end)
+    - a list of densities along each trace (raw, padded with 4*0)
+    """
+    img_up = img.copy()
+    img = cv2.resize(img, (img.shape[1]//2, img.shape[0]//2))
+    trace_list    = []
+    endpt_table   = []
+    densities_nrm = []
+    densities_pad = []
+    mask_hit_list = []
+    
+    learned_tracer  = tracer.tracer
+    analytic_tracer = tracer.analytic_tracer
+
+    L = len(endpts)
+    
+    if viz:
+        plt.close('all')
+        fig, axs = plt.subplots(2, (L+1)//2, figsize=(24, 12))
+
+    min_condition_pts = getattr(getattr(learned_tracer, "trace_config", None), "condition_len", 3)
+
+    for ep_idx in range(L):
+        img_mask = get_white_mask(img_up, endpts[ep_idx])
+        img_mask = cv2.cvtColor(img_mask, cv2.COLOR_GRAY2RGB)
+        start_pts, analytic_trace_end = analytic_tracer.trace(img_mask, np.array(endpts[ep_idx]), path_len=3)
+        start_pts = np.array(start_pts) if start_pts is not None else np.empty((0, 2))
+
+        filtered_endpts = copy.deepcopy(endpts)
+        filtered_endpts[ep_idx] = np.array([-100, -100]) # dummy values filter out current endpoint
+
+        if len(start_pts) < min_condition_pts:
+            print(
+                f"Analytic tracer returned {len(start_pts)} start point(s) for trace {ep_idx}, "
+                f"requires >= {min_condition_pts}. Falling back to short analytic trace."
+            )
+            trace_path = np.flip(start_pts, axis=1) if start_pts.size else np.array([endpts[ep_idx][::-1]])
+            trace_end = analytic_trace_end
+            t_endpoint = None
+            densities = np.array([])
+            mask_num = -1
+        else:
+            output = learned_tracer.trace(img_mask, start_pts, filtered_endpts, path_len=250, use_vit=False)
+            trace_path  = np.flip(output["trace"], axis=1)
+            trace_end   = output["trace_end"]
+            t_endpoint  = output["t_endpoint"]
+            densities   = output["densities"]
+            mask_num = output["mask_num"]
+
+        print(f"mask_num for trace {ep_idx}:", mask_num)
+        print(f"Trace end for trace {ep_idx}:", trace_end)
+        trace_list.append(trace_path)
+        mask_hit_list.append(mask_num)
+
+        if trace_end == TraceEnd.ENDPOINT and t_endpoint is not None:
+            equality = np.all(filtered_endpts == t_endpoint, axis=1)
+            match_idx = np.nonzero(equality)[0]
+            endpt_table.append([ep_idx, int(match_idx[0]) if len(match_idx) > 0 else -1])
+        
+        elif trace_end == TraceEnd.FINISHED or trace_end == TraceEnd.RETRACE:
+            endpt_table.append([ep_idx, -1])
+            
+        elif trace_end == TraceEnd.EDGE:
+            print(f"\nHit edge of trace, appending [{ep_idx}, -1]")
+            endpt_table.append([ep_idx, -1])
+        else:
+            endpt_table.append([ep_idx, -1])
+
+        ### DENSE CODE ###
+        densities = np.array(densities)
+        if densities.size == 0:
+            density_norm = np.array([])
+        else:
+            density_range = np.max(densities) - np.min(densities)
+            if density_range == 0:
+                density_norm = np.zeros_like(densities)
+            else:
+                density_norm = (densities - np.min(densities)) / density_range
+        
+        density_pad0 = np.concatenate((np.zeros(4), density_norm))
+        densities_nrm.append(density_norm)
+        densities_pad.append(density_pad0)
+
+    ###plt###
+        if viz:
+            ax = axs.flat[ep_idx]
+            ax.imshow(visualize_multiple_paths(img, [np.array(trace_path)],
+                    [density_pad0], heat_thresh=-1)) # All densities
+            ax.scatter(endpts[ep_idx][1], endpts[ep_idx][0], c="blue", s=25)
+            ax.axis("off")
+    
+    if viz:
+        plt.show()
+
+    def plot(dir, ep=True):
+        if ep:
+            for endpt in endpts:
+                plt.scatter(endpt[1], endpt[0], c="blue", s=100)
+        plt.tight_layout()
+        plt.close()
+
+    if viz:
+        misc = f"Heatmap for {L} Traces\nHigh (red), Low (green), [Endpoint (blue)]"
+        fig.suptitle(f"Density {misc}")
+        plot("solo", ep=False)
+
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list,
+                    densities_pad, heat_thresh=-1)) # All densities
+        plt.title(f"Density {misc}")
+        plot("multi")
+        
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list,
+                    densities_pad, heat_thresh=DENSITY_THRESH))
+        plt.title(f"Density (> {DENSITY_THRESH}) {misc}")
+        plot("thresh")
+        
+        plt.figure(figsize=(16, 12))
+        plt.hist(np.concatenate(densities_nrm), bins=50, edgecolor='black')
+        plt.title(f"Density Histogram for {L} Traces")
+        plot("hist", ep=False)
+
+        plt.figure(figsize=(16, 12))
+        plt.imshow(visualize_multiple_paths(img, trace_list, [COLORS[i % len(COLORS)] for i in range(L)]))
+        plt.title(f"Trace Map for All {L} Traces")
+        plot("trace")
+        plt.show()
+    ########
+    
+    # Old mask hit logic; returns only one mask hit where now we want all
+    print(f"Mask hit list: {mask_hit_list}")
+    mask_hit_list = np.array([int(mask)-1 for mask in mask_hit_list if mask != -1])
+    
+    if not bimanual_declutter:
+        mask_hit = np.argwhere(mask_hit_list > -1)
+        
+        if len(mask_hit) > 0:
+            mask_hit_list = mask_hit_list[mask_hit[0]] # If we hit any mask, just return the first
+        else:
+            mask_hit_list = -1
+    
+    return trace_list, endpt_table, densities_nrm, mask_hit_list
 
 def divergence_points(ep_idx_1: int, ep_idx_2: int, trace_list: list,
                       img: np.ndarray, endpts: np.ndarray) -> np.ndarray:

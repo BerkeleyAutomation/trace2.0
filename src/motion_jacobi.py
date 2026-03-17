@@ -1,4 +1,3 @@
-import copy
 import cv2
 import time
 import colorsys
@@ -17,12 +16,11 @@ class _YKFrames:
 YK = _YKFrames()
 from skimage.filters import frangi
 from skimage.morphology import skeletonize
-from decluttering.src.divergencecopy import *
+from divergencecopy import *
 from autolab_core.transformations import rotation_matrix, quaternion_from_matrix
 # from untangling.utils.interface_rws_BRIO import CameraIntrinsics
 from autolab_core import RigidTransform, Point
 from autolab_core import CameraIntrinsics
-import jacobi
 
 X_BUFFER = 250
 Y_BUFFER = 100
@@ -49,22 +47,24 @@ DIST_TO_TABLE_RIGHT = 0.99 # meters
 
 T_CAM_BASE = RigidTransform.load("/home/justinyu/multicable-decluttering/decluttering/scripts/brio/brio_to_world_bww.tf").as_frames(from_frame="brio", to_frame="base_link")
 
-CAM_INTR = CameraIntrinsics(fx=3520.8500040186254, fy=3497.3960131473386,
-           cx=1774.5916966456814, cy=1061.031632888376, width=3809, height=2121, frame='brio')
+CAM_INTR = CameraIntrinsics(fx=3.43246678e+03, fy=3.44478930e+03,
+           cx=1.79637288e+03, cy=1.08661527e+03, width=3840, height=2160, frame='brio')
 
-FIXED_DEPTH = 0.061 + 0.127 + 0.003 ## adding extra protection
-FOAM_DEPTH = 0.0582 + 0.127 + 0.003 # 0.127 = 5 inch inc from box
+FIXED_DEPTH = 0.061
+FOAM_DEPTH = 0.0582
+
+# Hardcoded [x, y] offset (meters, world frame) applied to all robot target positions.
+# Adjust these values to shift the robot's target x,y positions globally.
+XY_OFFSET = [-0.03, 0.02]
 
 FOAM_DEPTH_R_ADJ_VAL =  -0.0025
 FOAM_DEPTH_L_ADJ_VAL = -0.005
 
-FOAM_DEPTH_R = 0.0543 + FOAM_DEPTH_R_ADJ_VAL + 0.127 + 0.003
-FOAM_DEPTH_L = 0.0534 + FOAM_DEPTH_L_ADJ_VAL + 0.127 + 0.003
+FOAM_DEPTH_R = 0.0543 + FOAM_DEPTH_R_ADJ_VAL
+FOAM_DEPTH_L = 0.0534 + FOAM_DEPTH_L_ADJ_VAL
 
-DEC_FIXED_DEPTH_OBJ_L = 0.0605 + 0.127 + 0.003 #0.0650
-DEC_FIXED_DEPTH_OBJ_R = 0.0605 + 0.127 + 0.003 #0.0650
-
-SAFE_HOME_Z = 0.3 ## keep this well above the table heigh
+DEC_FIXED_DEPTH_OBJ_L = 0.0605 #0.0650
+DEC_FIXED_DEPTH_OBJ_R = 0.0605 #0.0650
 DEC_CAM_INTR = CameraIntrinsics(fx=3.43246678e+03, fy=3.44478930e+03,
            cx=1.79637288e+03, cy=1.08661527e+03, width=3840, height=2160, frame='brio')
 
@@ -74,10 +74,15 @@ def get_world_coord_from_pixel_coord(pixel_coord, cam_intrinsics):
     cam_intrinsics: 3x3 camera intrinsics matrix
     '''
     pixel_coord = np.array(pixel_coord)
-    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.167-FOAM_DEPTH])
+    point_3d_cam = np.linalg.inv(cam_intrinsics._K).dot(np.r_[pixel_coord, 1.04-FOAM_DEPTH])
     point_3d_world = T_CAM_BASE.matrix.dot(np.r_[point_3d_cam, 1.0])
     # print(point_3d_world)
     point_3d_world = point_3d_world[:3]/point_3d_world[3]
+    point_3d_world[0] = 0.95-point_3d_world[0]
+    # point_3d_world[0] += XY_OFFSET[0]
+    point_3d_world[1] += XY_OFFSET[1]
+    # print("HELLO HELLO")
+    print(point_3d_world)
     point_3d_world[-1] = FOAM_DEPTH
     # print('non-homogenous = ', point_3d_world)
     return point_3d_world
@@ -158,7 +163,7 @@ def get_dist_gradient(labels, label):
     dist_transform = cv2.distanceTransform(binary_img, cv2.DIST_L2, 5)
 
     import matplotlib.pyplot as plt
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     
     #plot gaussian
     gaussian = gaussian_2d(padded_labels.shape[0], padded_labels.shape[1])
@@ -333,7 +338,7 @@ def get_push_coords(poi_coords, img_rgb, trace_list, endpt_1, endpt_2,
 
             vec_angle = vector_angle(poi_vec_1, poi_vec_2)
             if vec_angle > 90:
-                pass  # import pdb; pdb.set_trace()
+                import pdb; pdb.set_trace()
         
         poi_vec_bisect = (poi_vec_1 + poi_vec_2) / 2 # Direction
         bi_point = (poi_trace_1 + poi_trace_2) / 2   # coord(x, y)
@@ -686,459 +691,137 @@ def perform_pindown(trace, endpt_coord, img, iface, pin_arm=None, push_coord = N
 
     return pin_arm
 
-def _raise_to_safe_height_and_home(iface, arm: str):
-    """Raise to a safe absolute height before homing to avoid sweeping table objects."""
-    current_tf = iface.get_FK(arm)
-    safe_translation = current_tf.translation.copy()
-    safe_translation[2] = SAFE_HOME_Z
-
-    if arm == 'right':
-        rotation   = iface.GRIP_DOWN_R
-        from_frame = YK.r_tcp_frame
-    else:
-        rotation   = iface.GRIP_DOWN_L
-        from_frame = YK.l_tcp_frame
-
-    safe_tf = RigidTransform(
-        translation=safe_translation,
-        rotation=rotation,
-        from_frame=from_frame,
-        to_frame="base_link",
-    )
-    if arm == 'right':
-        iface.go_linear_single(r_target=safe_tf)
-    else:
-        iface.go_linear_single(l_target=safe_tf)
-
-    iface.home()
-
 def perform_push_through(poi_trace, cen_poi_vec, iface, viz=False, pin_arm=None):
-    print("=" * 80)
-    print("PERFORMING PUSH THROUGH — DEBUG LOG START")
-    print("=" * 80)
-
-    # --- Log inputs ---
-    print(f"[DEBUG] poi_trace (pixel coord): {poi_trace}  (type={type(poi_trace)})")
-    print(f"[DEBUG] cen_poi_vec (pixel coord): {cen_poi_vec}  (type={type(cen_poi_vec)})")
-    print(f"[DEBUG] pin_arm: {pin_arm}")
-
-    # --- Log depth constants ---
-    print(f"[DEBUG] FOAM_DEPTH_R = {FOAM_DEPTH_R}  (components: 0.0543 + FOAM_DEPTH_R_ADJ_VAL={FOAM_DEPTH_R_ADJ_VAL} + 0.127)")
-    print(f"[DEBUG] FOAM_DEPTH_L = {FOAM_DEPTH_L}  (components: 0.0534 + FOAM_DEPTH_L_ADJ_VAL={FOAM_DEPTH_L_ADJ_VAL} + 0.127)")
-    print(f"[DEBUG] FOAM_DEPTH   = {FOAM_DEPTH}")
-    print(f"[DEBUG] FIXED_DEPTH  = {FIXED_DEPTH}")
-
     iface.home()
     iface.close_grippers()
 
     waypoint1 = cen_poi_vec
     waypoint2 = poi_trace
 
-    print(f"[DEBUG] waypoint1 (start, pixel): {waypoint1}")
-    print(f"[DEBUG] waypoint2 (goal,  pixel): {waypoint2}")
-
-    # --- Log raw world coordinates before depth override ---
-    place1_raw = get_world_coord_from_pixel_coord(waypoint1, CAM_INTR)
-    place2_raw = get_world_coord_from_pixel_coord(waypoint2, CAM_INTR)
-    print(f"[DEBUG] place1 raw world coord (from pixel): {place1_raw}")
-    print(f"[DEBUG] place2 raw world coord (from pixel): {place2_raw}")
-
-    place1 = place1_raw
-    place2 = place2_raw
-
-    # --- Arm selection ---
-    # OLD (pixel-x based, only correct when camera x-axis aligns with robot lateral y-axis):
-    # arm_side = "RIGHT" if poi_trace[0] > 1904 else "LEFT"
-    # print(f"[DEBUG] poi_trace[0] = {poi_trace[0]}, threshold = 1904 → using {arm_side} arm")
-    # NEW (world-y based: right arm serves negative-y workspace, left arm serves positive-y):
-    arm_side = "RIGHT" if place2_raw[1] < 0 else "LEFT"
-    print(f"[DEBUG] place2_raw[1] (world_y) = {place2_raw[1]:.4f} → using {arm_side} arm")
-
-    # if poi_trace[0] > 1904:
-    if place2_raw[1] < 0:
-        # ---- RIGHT ARM BRANCH ----
-        print(f"[DEBUG] === RIGHT ARM BRANCH ===")
+    # print('waypoint1: ', waypoint1)
+    # print('waypoint2: ', waypoint2)
+    print("PERFORMING PUSH THROUGH")
+    
+    place1 = get_world_coord_from_pixel_coord(waypoint1, CAM_INTR) # convert pixel coordinates to 3d coordinates
+    place2 = get_world_coord_from_pixel_coord(waypoint2, CAM_INTR) # convert pixel coordinates to 3d coordinates
+    if poi_trace[0] > 1904:
+        place1[1] += 0.02
+        place2[1] += 0.02
         place1 = np.array([place1[0], place1[1], FOAM_DEPTH_R])
         place2 = np.array([place2[0], place2[1], FOAM_DEPTH_R])
-        print(f"[DEBUG] place1 (with FOAM_DEPTH_R z={FOAM_DEPTH_R}): {place1}")
-        print(f"[DEBUG] place2 (with FOAM_DEPTH_R z={FOAM_DEPTH_R}): {place2}")
+        print(place1)
+        print(place2)
+        intermediate_place1 = place1 + np.array([0, 0, 0.07])
+        intermediate_place2 = place2 + np.array([0, 0, 0.07])
+        print(intermediate_place1)
+        print(intermediate_place2)
 
-        intermediate_offset = np.array([0, 0, 0.06])
-        intermediate_place1 = place1 + intermediate_offset
-        intermediate_place2 = place2 + intermediate_offset
-        print(f"[DEBUG] intermediate z-offset: {intermediate_offset[2]}")
-        print(f"[DEBUG] intermediate_place1: {intermediate_place1}")
-        print(f"[DEBUG] intermediate_place2: {intermediate_place2}")
-
-        print(f"[DEBUG] Building intermediate_place1_transform:")
-        print(f"[DEBUG]   translation = {intermediate_place1}")
-        print(f"[DEBUG]   rotation    = iface.GRIP_DOWN_R =\n{iface.GRIP_DOWN_R}")
-        print(f"[DEBUG]   from_frame  = {YK.r_tcp_frame}")
-        print(f"[DEBUG]   to_frame    = base_link")
         intermediate_place1_transform = RigidTransform(
             translation=intermediate_place1,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.r_tcp_frame,
             to_frame="base_link",
         )
-
         current_tf = iface.get_FK('right')
-        print(f"[DEBUG] Current FK (right arm):")
-        print(f"[DEBUG]   translation = {current_tf.translation}")
-        print(f"[DEBUG]   rotation    =\n{current_tf.rotation}")
-
+        
         # add an interpolated RigidTransform between current_tf and intermediate_place1_transform
-        curr_intermediate_translation = current_tf.translation + (intermediate_place1_transform.translation - current_tf.translation) / 2
-        print(f"[DEBUG] curr_intermediate_translation (midpoint): {curr_intermediate_translation}")
         curr_intermediate_transform = RigidTransform(
-            translation = curr_intermediate_translation,
+            translation = current_tf.translation + (intermediate_place1_transform.translation - current_tf.translation) / 2,
             rotation = current_tf.rotation,
             from_frame=YK.r_tcp_frame,
             to_frame="base_link",
         )
-
-        print(f"[DEBUG] Building place1_transform:")
-        print(f"[DEBUG]   translation = {place1}")
+        
         place1_transform = RigidTransform(
             translation=place1,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.r_tcp_frame,
             to_frame="base_link",
         )
-
-        print(f"[DEBUG] Building place2_transform:")
-        print(f"[DEBUG]   translation = {place2}")
         place2_transform = RigidTransform(
             translation=place2,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.r_tcp_frame,
             to_frame="base_link",
         )
-        intermediate_place2_transform = RigidTransform(
-            translation=intermediate_place2,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.r_tcp_frame,
-            to_frame="base_link",
-        )
-
-        # --- Log distances between waypoints ---
-        dist_inter_to_place1 = np.linalg.norm(intermediate_place1 - place1)
-        dist_place1_to_place2 = np.linalg.norm(place1 - place2)
-        dist_fk_to_inter = np.linalg.norm(current_tf.translation - intermediate_place1)
-        print(f"[DEBUG] Distance FK → intermediate_place1:     {dist_fk_to_inter:.4f} m")
-        print(f"[DEBUG] Distance intermediate_place1 → place1: {dist_inter_to_place1:.4f} m")
-        print(f"[DEBUG] Distance place1 → place2:              {dist_place1_to_place2:.4f} m")
-
-        # --- Log z-values summary for quick inspection ---
-        print(f"[DEBUG] Z-values summary:")
-        print(f"[DEBUG]   current FK z:          {current_tf.translation[2]:.4f}")
-        print(f"[DEBUG]   intermediate_place1 z:  {intermediate_place1[2]:.4f}")
-        print(f"[DEBUG]   place1 z (table):       {place1[2]:.4f}")
-        print(f"[DEBUG]   place2 z (table):       {place2[2]:.4f}")
-
-        # Sequential plan-and-execute: each step uses real current position
-        # Step 1: Column approach — raise straight up from home, then free-space lateral, then descend
-        #   Step 1a: linear raise to SAFE_HOME_Z at current (home) x,y — guaranteed safe (short vertical)
-        #   Step 1b: free-space lateral to column above hover — purely lateral at safe height
-        #   Step 1c: linear descent to hover
-        home_r_tf = iface.get_FK('right')
-        raise_r = np.array([home_r_tf.translation[0], home_r_tf.translation[1], SAFE_HOME_Z])
-        raise_r_transform = RigidTransform(
-            translation=raise_r,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.r_tcp_frame,
-            to_frame="base_link",
-        )
-        # Use hover+0.04 as column height: hover IS reachable so 4cm above it is also reachable.
-        # Fixed SAFE_HOME_Z=0.3 can fail IK for far-forward positions (arm can't reach that high there).
-        column_r_z = max(intermediate_place1[2] + 0.04, SAFE_HOME_Z)
-        column_r = np.array([intermediate_place1[0], intermediate_place1[1], column_r_z])
-        column_r_transform = RigidTransform(
-            translation=column_r,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.r_tcp_frame,
-            to_frame="base_link",
-        )
-        print(f"[DEBUG] Step 1a: go_linear_single → raise_r (straight up to z={SAFE_HOME_Z} at home x,y)")
-        try:
-            iface.go_linear_single(r_target=raise_r_transform)
-            print(f"[DEBUG] Step 1a succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 1a FAILED (raise to safe height): {e}")
-            print(f"[ERROR]   Target: {raise_r}")
-            print("=" * 80)
-            raise
-        print(f"[DEBUG] Step 1b: go_cartesian_waypoints → column_r (lateral, z={column_r_z:.4f} = hover+0.04)")
-        try:
-            iface.go_cartesian_waypoints(r_targets=[column_r_transform])
-            print(f"[DEBUG] Step 1b succeeded.")
-        except Exception as e:
-            print(f"[WARN] Step 1b cartesian failed ({e}), retrying with go_linear_single")
-            try:
-                iface.go_linear_single(r_target=column_r_transform)
-                print(f"[DEBUG] Step 1b go_linear_single fallback succeeded.")
-            except Exception as e2:
-                print(f"[ERROR] Step 1b FAILED both planners: {e2}")
-                print(f"[ERROR]   Target: {column_r}")
-                print("=" * 80)
-                raise
-        print(f"[DEBUG] Step 1c: go_linear_single → intermediate_place1 (hover)")
-        try:
-            iface.go_linear_single(r_target=intermediate_place1_transform)
-            print(f"[DEBUG] Step 1c succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 1c FAILED (linear descent to hover): {e}")
-            print(f"[ERROR]   Target: {intermediate_place1}")
-            print("=" * 80)
-            raise
-
-        # Step 2: Linear descent to table
-        print(f"[DEBUG] Step 2: go_linear_single → place1 (descend to table)")
-        try:
-            iface.go_linear_single(r_target=place1_transform)
-            print(f"[DEBUG] Step 2 succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 2 FAILED (linear descent): {e}")
-            print(f"[ERROR]   Target: {place1}")
-            print("=" * 80)
-            iface.go_delta(right_delta=[0, 0, 0.1])
-            raise
-
-        # Step 3: Linear push along table
-        print(f"[DEBUG] Step 3: go_linear_single → place2 (push)")
-        try:
-            iface.go_linear_single(r_target=place2_transform)
-            print(f"[DEBUG] Step 3 succeeded.")
-        except Exception as e:
-            print(f"[WARN] Step 3 linear push failed ({e}), retrying via arc (hover→place2)")
-            # iface.go_delta(right_delta=[0, 0, 0.1])
-            # raise
-            # OLD cartesian-direct fallback (also failed on goal pose IK):
-            # iface.go_cartesian_waypoints(r_targets=[place2_transform])
-            try:
-                iface.go_cartesian_waypoints(r_targets=[intermediate_place2_transform])
-                iface.go_linear_single(r_target=place2_transform)
-                print(f"[DEBUG] Step 3 arc fallback succeeded.")
-            except Exception as e2:
-                print(f"[WARN] Step 3 arc fallback failed ({e2}), skipping this crossing")
-                print(f"[WARN]   Target: {place2}")
-                print("=" * 80)
-                retreat_r_tf = iface.get_FK('right')
-                retreat_r = RigidTransform(
-                    translation=retreat_r_tf.translation + np.array([0, 0, 0.1]),
-                    rotation=retreat_r_tf.rotation,
-                    from_frame=YK.r_tcp_frame,
-                    to_frame='base_link',
-                )
-                iface.go_linear_single(r_target=retreat_r)
-
-        retreat_r_tf = iface.get_FK('right')
-        retreat_r = RigidTransform(
-            translation=retreat_r_tf.translation + np.array([0, 0, 0.1]),
-            rotation=retreat_r_tf.rotation,
-            from_frame=YK.r_tcp_frame,
-            to_frame='base_link',
-        )
-        iface.go_linear_single(r_target=retreat_r)
+        
+        # m1 = iface.listRT2Motion(robot = iface.yumi.right, start = iface.driver_right.current_joint_position, wp_list = [curr_intermediate_transform, intermediate_place1_transform, place1_transform])
+        # lm1 = iface.listRT2LinearMotion(robot = iface.yumi.right, start = place1_transform, goal = place2_transform)
+        # motion = [m1, lm1]
+        
+        traj = iface.plan_linear_waypoints(r_targets=[intermediate_place1_transform, place1_transform, place2_transform], return_motions=False)
+        
+        # traj = iface.plan(motion)
+        # import pdb; pdb.set_trace()
+        if traj is None:
+            print("Motion planning failed!")
+            return RuntimeError
+        
+        result = iface.run_trajectories(traj) # come back to
+            
+        iface.go_delta(right_delta=[0, 0, 0.05])
 
     else:
-        # ---- LEFT ARM BRANCH ----
-        print(f"[DEBUG] === LEFT ARM BRANCH ===")
         place1 = np.array([place1[0], place1[1], FOAM_DEPTH_L])
         place2 = np.array([place2[0], place2[1], FOAM_DEPTH_L])
-        print(f"[DEBUG] place1 (with FOAM_DEPTH_L z={FOAM_DEPTH_L}): {place1}")
-        print(f"[DEBUG] place2 (with FOAM_DEPTH_L z={FOAM_DEPTH_L}): {place2}")
+        print(place1)
+        print(place2)
+        intermediate_place1 = place1 + np.array([0, 0, 0.07])
+        intermediate_place2 = place2 + np.array([0, 0, 0.07])
+        print(intermediate_place1)
+        print(intermediate_place2)
 
-        intermediate_offset = np.array([0, 0, 0.035])
-        intermediate_place1 = place1 + intermediate_offset
-        intermediate_place2 = place2 + intermediate_offset
-        print(f"[DEBUG] intermediate z-offset: {intermediate_offset[2]}")
-        print(f"[DEBUG] intermediate_place1: {intermediate_place1}")
-        print(f"[DEBUG] intermediate_place2: {intermediate_place2}")
-
-        print(f"[DEBUG] Building intermediate_place1_transform:")
-        print(f"[DEBUG]   translation = {intermediate_place1}")
-        print(f"[DEBUG]   rotation    = iface.GRIP_DOWN_R =\n{iface.GRIP_DOWN_R}")
-        print(f"[DEBUG]   from_frame  = {YK.l_tcp_frame}")
-        print(f"[DEBUG]   to_frame    = base_link")
         intermediate_place1_transform = RigidTransform(
             translation=intermediate_place1,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.l_tcp_frame,
             to_frame="base_link",
         )
-
+        
         current_tf = iface.get_FK('left')
-        print(f"[DEBUG] Current FK (left arm):")
-        print(f"[DEBUG]   translation = {current_tf.translation}")
-        print(f"[DEBUG]   rotation    =\n{current_tf.rotation}")
-
+        
         # add an interpolated RigidTransform between current_tf and intermediate_place1_transform
-        curr_intermediate_translation = current_tf.translation + (intermediate_place1_transform.translation - current_tf.translation) / 2
-        print(f"[DEBUG] curr_intermediate_translation (midpoint): {curr_intermediate_translation}")
         curr_intermediate_transform = RigidTransform(
-            translation = curr_intermediate_translation,
+            translation = current_tf.translation + (intermediate_place1_transform.translation - current_tf.translation) / 2,
             rotation = current_tf.rotation,
             from_frame=YK.l_tcp_frame,
             to_frame="base_link",
         )
-
-        print(f"[DEBUG] Building place1_transform:")
-        print(f"[DEBUG]   translation = {place1}")
+        
         place1_transform = RigidTransform(
             translation=place1,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.l_tcp_frame,
             to_frame="base_link",
         )
-
-        print(f"[DEBUG] Building place2_transform:")
-        print(f"[DEBUG]   translation = {place2}")
         place2_transform = RigidTransform(
             translation=place2,
             rotation= iface.GRIP_DOWN_R,
             from_frame=YK.l_tcp_frame,
             to_frame="base_link",
         )
-        intermediate_place2_transform = RigidTransform(
-            translation=intermediate_place2,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.l_tcp_frame,
-            to_frame="base_link",
-        )
+        
+        # m1 = iface.listRT2Motion(robot = iface.yumi.left, start = iface.driver_left.current_joint_position, wp_list = [curr_intermediate_transform, intermediate_place1_transform, place1_transform])
+        # lm1 = iface.listRT2LinearMotion(robot = iface.yumi.left, start = place1_transform, goal = place2_transform)
+        # motion = [m1, lm1]
+        
+        traj = iface.plan_linear_waypoints(l_targets=[intermediate_place1_transform, place1_transform, place2_transform], return_motions=False)
 
-        # --- Log distances between waypoints ---
-        dist_inter_to_place1 = np.linalg.norm(intermediate_place1 - place1)
-        dist_place1_to_place2 = np.linalg.norm(place1 - place2)
-        dist_fk_to_inter = np.linalg.norm(current_tf.translation - intermediate_place1)
-        print(f"[DEBUG] Distance FK → intermediate_place1:     {dist_fk_to_inter:.4f} m")
-        print(f"[DEBUG] Distance intermediate_place1 → place1: {dist_inter_to_place1:.4f} m")
-        print(f"[DEBUG] Distance place1 → place2:              {dist_place1_to_place2:.4f} m")
+        # traj = iface.plan(motion)
+        if traj is None:
+            print("Motion planning failed!")
+            return RuntimeError
 
-        # --- Log z-values summary for quick inspection ---
-        print(f"[DEBUG] Z-values summary:")
-        print(f"[DEBUG]   current FK z:          {current_tf.translation[2]:.4f}")
-        print(f"[DEBUG]   intermediate_place1 z:  {intermediate_place1[2]:.4f}")
-        print(f"[DEBUG]   place1 z (table):       {place1[2]:.4f}")
-        print(f"[DEBUG]   place2 z (table):       {place2[2]:.4f}")
-
-        # Sequential plan-and-execute: each step uses real current position
-        # Step 1: Column approach — raise straight up from home, then free-space lateral, then descend
-        #   Step 1a: linear raise to SAFE_HOME_Z at current (home) x,y — guaranteed safe (short vertical)
-        #   Step 1b: free-space lateral to column above hover — purely lateral at safe height
-        #   Step 1c: linear descent to hover
-        home_l_tf = iface.get_FK('left')
-        raise_l = np.array([home_l_tf.translation[0], home_l_tf.translation[1], SAFE_HOME_Z])
-        raise_l_transform = RigidTransform(
-            translation=raise_l,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.l_tcp_frame,
-            to_frame="base_link",
-        )
-        # Use hover+0.04 as column height: hover IS reachable so 4cm above it is also reachable.
-        # Fixed SAFE_HOME_Z=0.3 can fail IK for some positions (arm can't reach that high there).
-        column_l_z = max(intermediate_place1[2] + 0.04, SAFE_HOME_Z)
-        column_l = np.array([intermediate_place1[0], intermediate_place1[1], column_l_z])
-        column_l_transform = RigidTransform(
-            translation=column_l,
-            rotation=iface.GRIP_DOWN_R,
-            from_frame=YK.l_tcp_frame,
-            to_frame="base_link",
-        )
-        print(f"[DEBUG] Step 1a: go_linear_single → raise_l (straight up to z={SAFE_HOME_Z} at home x,y)")
-        try:
-            iface.go_linear_single(l_target=raise_l_transform)
-            print(f"[DEBUG] Step 1a succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 1a FAILED (raise to safe height): {e}")
-            print(f"[ERROR]   Target: {raise_l}")
-            print("=" * 80)
-            raise
-        print(f"[DEBUG] Step 1b: go_cartesian_waypoints → column_l (lateral, z={column_l_z:.4f} = hover+0.04)")
-        try:
-            iface.go_cartesian_waypoints(l_targets=[column_l_transform])
-            print(f"[DEBUG] Step 1b succeeded.")
-        except Exception as e:
-            print(f"[WARN] Step 1b cartesian failed ({e}), retrying with go_linear_single")
-            try:
-                iface.go_linear_single(l_target=column_l_transform)
-                print(f"[DEBUG] Step 1b go_linear_single fallback succeeded.")
-            except Exception as e2:
-                print(f"[ERROR] Step 1b FAILED both planners: {e2}")
-                print(f"[ERROR]   Target: {column_l}")
-                print("=" * 80)
-                raise
-        print(f"[DEBUG] Step 1c: go_linear_single → intermediate_place1 (hover)")
-        try:
-            iface.go_linear_single(l_target=intermediate_place1_transform)
-            print(f"[DEBUG] Step 1c succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 1c FAILED (linear descent to hover): {e}")
-            print(f"[ERROR]   Target: {intermediate_place1}")
-            print("=" * 80)
-            raise
-
-        # Step 2: Linear descent to table
-        print(f"[DEBUG] Step 2: go_linear_single → place1 (descend to table)")
-        try:
-            iface.go_linear_single(l_target=place1_transform)
-            print(f"[DEBUG] Step 2 succeeded.")
-        except Exception as e:
-            print(f"[ERROR] Step 2 FAILED (linear descent): {e}")
-            print(f"[ERROR]   Target: {place1}")
-            print("=" * 80)
-            iface.go_delta(left_delta=[0, 0, 0.1])
-            raise
-
-        # Step 3: Linear push along table
-        print(f"[DEBUG] Step 3: go_linear_single → place2 (push)")
-        try:
-            iface.go_linear_single(l_target=place2_transform)
-            print(f"[DEBUG] Step 3 succeeded.")
-        except Exception as e:
-            print(f"[WARN] Step 3 linear push failed ({e}), retrying via arc (hover→place2)")
-            # iface.go_delta(left_delta=[0, 0, 0.1])
-            # raise
-            # OLD cartesian-direct fallback (also failed on goal pose IK):
-            # iface.go_cartesian_waypoints(l_targets=[place2_transform])
-            try:
-                iface.go_cartesian_waypoints(l_targets=[intermediate_place2_transform])
-                iface.go_linear_single(l_target=place2_transform)
-                print(f"[DEBUG] Step 3 arc fallback succeeded.")
-            except Exception as e2:
-                print(f"[WARN] Step 3 arc fallback failed ({e2}), skipping this crossing")
-                print(f"[WARN]   Target: {place2}")
-                print("=" * 80)
-                retreat_l_tf = iface.get_FK('left')
-                retreat_l = RigidTransform(
-                    translation=retreat_l_tf.translation + np.array([0, 0, 0.1]),
-                    rotation=retreat_l_tf.rotation,
-                    from_frame=YK.l_tcp_frame,
-                    to_frame='base_link',
-                )
-                iface.go_linear_single(l_target=retreat_l)
-
-        retreat_l_tf = iface.get_FK('left')
-        retreat_l = RigidTransform(
-            translation=retreat_l_tf.translation + np.array([0, 0, 0.1]),
-            rotation=retreat_l_tf.rotation,
-            from_frame=YK.l_tcp_frame,
-            to_frame='base_link',
-        )
-        iface.go_linear_single(l_target=retreat_l)
+        result = iface.run_trajectories(traj)
+        
+        iface.go_delta(left_delta=[0, 0, 0.05])
 
     # if pin_arm is not None:
     #     time.sleep(1)
     #     iface.open_gripper(pin_arm)
     #     iface.sync()
-
-    print("[DEBUG] Push through complete, homing...")
-    print("=" * 80)
-
-    # arm_used = 'right' if poi_trace[0] > 1904 else 'left'  # old pixel-x based
-    arm_used = arm_side.lower()
-    arm_used = "right" if place2_raw[1] < 0 else "left"
-    _raise_to_safe_height_and_home(iface, arm_used) 
+    
+    iface.home()
     iface.close_grippers()
     return True
 
@@ -1161,10 +844,9 @@ def perform_pick_away(poi_trace, cen_poi_vec, iface, trace, deviaiton_idx, viz=F
     
 
     # fixed_depth = 0.0438
-    place1 = get_world_coord_from_pixel_coord(waypoint1, CAM_INTR) # convert pixel coordinates to 3d coordinates
-    place2 = get_world_coord_from_pixel_coord(waypoint2, CAM_INTR) # convert pixel coordinates to 3d coordinates
-    # OLD (pixel-x based): if poi_trace[0] > 1904:
-    if place1[1] < 0:
+    if poi_trace[0] > 1904:
+        place1 = get_world_coord_from_pixel_coord(waypoint1, CAM_INTR) # convert pixel coordinates to 3d coordinates
+        place2 = get_world_coord_from_pixel_coord(waypoint2, CAM_INTR) # convert pixel coordinates to 3d coordinates
         place1 = [place1[0], place1[1], FIXED_DEPTH]
         place2 = [place2[0], place2[1], FIXED_DEPTH]
         # print(place1)
@@ -1243,7 +925,8 @@ def perform_pick_away(poi_trace, cen_poi_vec, iface, trace, deviaiton_idx, viz=F
         time.sleep(2)
 
     else:
-        # place1/place2 already computed above
+        place1 = get_world_coord_from_pixel_coord(waypoint1, CAM_INTR) # convert pixel coordinates to 3d coordinates
+        place2 = get_world_coord_from_pixel_coord(waypoint2, CAM_INTR) # convert pixel coordinates to 3d coordinates
         place1 = [place1[0], place1[1], FIXED_DEPTH]
         place2 = [place2[0], place2[1], FIXED_DEPTH]
         # print(place1)
@@ -1532,8 +1215,8 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     iface.open_grippers()
     place1_l = get_world_coord_from_pixel_coord(waypoint_l, DEC_CAM_INTR) # convert pixel coordinates to 3d coordinates
     place1_l = [place1_l[0], place1_l[1], DEC_FIXED_DEPTH_OBJ_L]
-    intermediate_place1_l = [place1_l[0], place1_l[1], 0.19 + 0.126]
-    intermediate_place2_l = [place1_l[0], place1_l[1], 0.17 + 0.126]
+    intermediate_place1_l = [place1_l[0], place1_l[1], 0.19]
+    intermediate_place2_l = [place1_l[0], place1_l[1], 0.17]
     rot_l = get_gripper_rot(np.radians(angle_l), iface)    
     intermediate_place1_transform_l = RigidTransform(
         translation=intermediate_place1_l,
@@ -1557,9 +1240,9 @@ def bimanual_grasp_and_bin_drop_pipeline(center_l, angle_l, center_r, angle_r, i
     )
 
     place1_r = get_world_coord_from_pixel_coord(waypoint_r, DEC_CAM_INTR) # convert pixel coordinates to 3d coordinates
-    place1_r = [place1_r[0], place1_r[1], DEC_FIXED_DEPTH_OBJ_R]
-    intermediate_place1_r = [place1_r[0], place1_r[1], 0.19 + 0.126]  #prev = 0.15
-    intermediate_place2_r = [place1_r[0], place1_r[1], 0.17 + 0.126]  #prev = 0.15
+    place1_r = [place1_r[0], place1_r[1], DEC_FIXED_DEPTH_OBJ_L]
+    intermediate_place1_r = [place1_r[0], place1_r[1], 0.19]  #prev = 0.15
+    intermediate_place2_r = [place1_r[0], place1_r[1], 0.17]  #prev = 0.15
     rot_r = get_gripper_rot(np.radians(angle_r), iface)
      
     intermediate_place1_transform_r = RigidTransform(
@@ -1783,33 +1466,27 @@ def perform_bimanual_point_grasp(centers, angles, iface, img = None, viz=False, 
     
 
 # josh - 11/04/24
-def goto_gripper_px(pixel: np.ndarray, iface, hover_only: bool = False) -> str:
+def goto_gripper_px(pixel: np.ndarray, iface) -> str:
     iface.home()
     iface.close_grippers()
     
     world = get_world_coord_from_pixel_coord(pixel, CAM_INTR)
-    
 
-    # OLD (pixel-x based, only correct when camera x-axis aligns with robot lateral y-axis):
-    # if pixel[0] > 1904:
-    # NEW (world-y based: right arm serves negative-y workspace, left arm serves positive-y):
-    if world[1] < 0:
+    if pixel[0] > 1904:
+        world[1] += 0.02
         depth_val  = FOAM_DEPTH_R + 0.0025 # 0.0025 is the offset to ensure the gripper is above the foam in case cables are stacked
         rotation   = iface.GRIP_DOWN_R
         from_frame = YK.r_tcp_frame
         arm = "right"
     else:
-        depth_val  = FOAM_DEPTH_L + 0.0025 # 0.0025
+        depth_val  = FOAM_DEPTH_L + 0.0025
         rotation   = iface.GRIP_DOWN_L
         from_frame = YK.l_tcp_frame
         arm = "left"
-
-    
     
     final = np.array([world[0], world[1], depth_val]) # goes into foam
     first = world + np.array([0, 0, 0.05])            # goes above POI
 
-    print(f"[CALIB] pixel={pixel}, world={world}, arm={arm}, final={final}, first={first}")
     first_transform = RigidTransform(
         translation=first,
         rotation=rotation,
@@ -1822,36 +1499,18 @@ def goto_gripper_px(pixel: np.ndarray, iface, hover_only: bool = False) -> str:
         from_frame=from_frame,
         to_frame="base_link",
     )
-    # Column approach: raise straight up from home, free-space lateral, then descend.
-    # Use hover+0.04 as column height (not SAFE_HOME_Z=0.3 which can fail IK at far positions).
-    column = np.array([first[0], first[1], first[2] + 0.04])
-    column_transform = RigidTransform(
-        translation=column,
-        rotation=rotation,
-        from_frame=from_frame,
-        to_frame="base_link",
-    )
+    T = [first_transform, final_transform]
+    
     if arm == "right":
-        home_tf = iface.get_FK('right')
-        raise_pt = np.array([home_tf.translation[0], home_tf.translation[1], SAFE_HOME_Z])
-        raise_transform = RigidTransform(translation=raise_pt, rotation=rotation,
-                                         from_frame=from_frame, to_frame="base_link")
-        iface.go_linear_single(r_target=raise_transform)
-        iface.go_cartesian_waypoints(r_targets=[column_transform])
-        iface.go_linear_single(r_target=first_transform)
-        if not hover_only:
-            iface.go_linear_single(r_target=final_transform)
+        traj = iface.plan_linear_waypoints(r_targets=T, return_motions=False)
     else:
-        home_tf = iface.get_FK('left')
-        raise_pt = np.array([home_tf.translation[0], home_tf.translation[1], SAFE_HOME_Z])
-        raise_transform = RigidTransform(translation=raise_pt, rotation=rotation,
-                                         from_frame=from_frame, to_frame="base_link")
-        iface.go_linear_single(l_target=raise_transform)
-        iface.go_cartesian_waypoints(l_targets=[column_transform])
-        iface.go_linear_single(l_target=first_transform)
-        if not hover_only:
-            iface.go_linear_single(l_target=final_transform)
-    return arm
+        traj = iface.plan_linear_waypoints(l_targets=T, return_motions=False)
+
+    if traj is None:
+        raise ValueError("Motion planning failure in goto_gripper_px")
+    else:
+        iface.run_trajectories(traj)
+        return arm
 
 
 # josh - 11/04/24
@@ -1861,7 +1520,7 @@ def rotate_gripper(arm: str, iface):
     negative_90 = copy.deepcopy(positive_90)
     
     positive_90[-1] = min(positive_90[-1] + np.pi/2, 2*np.pi)   # rotate wrist angles
-    negative_90[-1] = max(negative_90[-1] - np.pi/2, -2*np.pi)
+    negative_90[-1] = max(positive_90[-1] - np.pi/2, -2*np.pi)
 
     if arm == "right":
         iface.move_to(right_goal=positive_90)
